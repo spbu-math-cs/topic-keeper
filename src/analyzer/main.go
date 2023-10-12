@@ -7,7 +7,6 @@ import (
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"io/ioutil"
 	"net/http"
-	"slices"
 )
 
 type Message struct {
@@ -16,13 +15,15 @@ type Message struct {
 	Topic   string `json:"topic"`
 }
 
-// словарь типа [пользователь] - [словарь типа [канал] - [топики канала]]
-var users map[string]map[string][]string
-
-// словарь типа [канал] - [словарь типа [топик] - [кол-во ссылок]]
-var channelTopicCount map[string]map[string]int
+var topicTimes channelTopicTime
+var topicCount channelTopicCount
+var dataBase usersChannelsTopics
 
 func main() {
+
+	dataBase.topicCount = &topicCount
+	topicCount.topicTime = &topicTimes
+
 	router := gin.Default()
 
 	router.POST("/add", add)
@@ -50,6 +51,8 @@ func setError(c *gin.Context, code int, message string) {
 }
 
 func add(c *gin.Context) {
+	dataBase.mut.Lock()
+
 	fmt.Println(c.Request.Header)
 
 	body, err := ioutil.ReadAll(c.Request.Body)
@@ -68,13 +71,13 @@ func add(c *gin.Context) {
 		return
 	}
 
-	if !slices.Contains(users[message.User][message.Channel], message.Topic) {
-		users[message.User][message.Channel] = append(users[message.User][message.Channel], message.Topic)
-		channelTopicCount[message.Channel][message.Topic] += 1
-	}
+	dataBase.add(message.User, message.Channel, message.Topic)
+
+	dataBase.mut.Unlock()
 }
 
 func remove(c *gin.Context) {
+	dataBase.mut.Lock()
 	fmt.Println(c.Request.Header)
 
 	body, err := ioutil.ReadAll(c.Request.Body)
@@ -93,37 +96,21 @@ func remove(c *gin.Context) {
 		return
 	}
 
-	_, ok := users[message.User]
+	_, ok := dataBase.channelTopics[message.User]
 	if !ok {
 		setError(c, http.StatusBadRequest, "can`t find user")
-		delete(users, message.User)
+		delete(dataBase.channelTopics, message.User)
 		return
 	}
 
-	_, ok = users[message.User][message.Channel]
+	_, ok = dataBase.channelTopics[message.User][message.Channel]
 	if !ok {
 		setError(c, http.StatusBadRequest, "can`t find channel in this user`s channels")
-		delete(users[message.User], message.Channel)
+		delete(dataBase.channelTopics[message.User], message.Channel)
 		return
 	}
 
-	for i := 0; i < len(users[message.User][message.Channel]); i += 1 {
-		if users[message.User][message.Channel][i] == message.Topic {
-			users[message.User][message.Channel] = append(users[message.User][message.Channel][:i], users[message.User][message.Channel][i+1:]...)
-			channelTopicCount[message.Channel][message.Topic] -= 1
-			break
-		}
-	}
+	dataBase.remove(message.User, message.Channel, message.Topic)
 
-	if len(users[message.User][message.Channel]) == 0 {
-		delete(users[message.User], message.Channel)
-	}
-
-	if len(users[message.User]) == 0 {
-		delete(users, message.User)
-	}
-
-	if channelTopicCount[message.Channel][message.Topic] <= 0 {
-		delete(channelTopicCount[message.Channel], message.Topic)
-	}
+	dataBase.mut.Unlock()
 }
