@@ -9,15 +9,29 @@ import (
 	"net/http"
 )
 
-type Message struct {
+type commandMessage struct {
 	User    string `json:"user"`
 	Channel string `json:"channel"`
 	Topic   string `json:"topic"`
 }
 
-var topicTimes channelTopicTime
-var topicCount channelTopicCount
-var dataBase usersChannelsTopics
+type newsMessage struct {
+	Channel string `json:"channel"`
+	Text    string `json:"text"`
+}
+
+type returnMessage struct {
+	User    string `json:"user"`
+	Channel string `json:"channel"`
+	Topic   string `json:"topic"`
+	Summary string `json:"summary"`
+}
+
+var (
+	topicTimes channelTopicTime
+	topicCount channelTopicCount
+	dataBase   usersChannelsTopics
+)
 
 func main() {
 
@@ -52,7 +66,7 @@ func setError(c *gin.Context, code int, message string) {
 
 func add(c *gin.Context) {
 	dataBase.mut.Lock()
-
+	defer dataBase.mut.Unlock()
 	fmt.Println(c.Request.Header)
 
 	body, err := ioutil.ReadAll(c.Request.Body)
@@ -62,7 +76,7 @@ func add(c *gin.Context) {
 		return
 	}
 
-	var message Message
+	var message commandMessage
 
 	err = json.Unmarshal(body, &message)
 
@@ -73,11 +87,11 @@ func add(c *gin.Context) {
 
 	dataBase.add(message.User, message.Channel, message.Topic)
 
-	dataBase.mut.Unlock()
 }
 
 func remove(c *gin.Context) {
 	dataBase.mut.Lock()
+	defer dataBase.mut.Unlock()
 	fmt.Println(c.Request.Header)
 
 	body, err := ioutil.ReadAll(c.Request.Body)
@@ -87,7 +101,7 @@ func remove(c *gin.Context) {
 		return
 	}
 
-	var message Message
+	var message commandMessage
 
 	err = json.Unmarshal(body, &message)
 
@@ -112,5 +126,4 @@ func remove(c *gin.Context) {
 
 	dataBase.remove(message.User, message.Channel, message.Topic)
 
-	dataBase.mut.Unlock()
 }
