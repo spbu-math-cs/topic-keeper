@@ -9,18 +9,18 @@ import (
 	"net/http"
 )
 
-type commandMessage struct {
+type CommandMessage struct {
 	User    string `json:"user"`
 	Channel string `json:"channel"`
 	Topic   string `json:"topic"`
 }
 
-type newsMessage struct {
+type NewsMessage struct {
 	Channel string `json:"channel"`
 	Text    string `json:"text"`
 }
 
-type returnMessage struct {
+type ReturnMessage struct {
 	User    string `json:"user"`
 	Channel string `json:"channel"`
 	Topic   string `json:"topic"`
@@ -28,23 +28,30 @@ type returnMessage struct {
 }
 
 var (
-	topicTimes channelTopicTime
-	topicCount channelTopicCount
-	dataBase   usersChannelsTopics
+	topicTimes    ChannelTopicTime
+	topicCount    ChannelTopicCount
+	dataBase      UsersChannelsTopics
+	analyzer      Analyzer
+	summarizer    MessageSummarizer
+	summaryLength = 100
 )
 
 func main() {
 
 	dataBase.topicCount = &topicCount
 	topicCount.topicTime = &topicTimes
+	summarizer.textLength = summaryLength
+	analyzer.summarizer = summarizer
 
 	router := gin.Default()
 
 	router.POST("/add", add)
 	router.POST("/remove", remove)
+	router.GET("/news", news)
 
 	router.OPTIONS("/add", auto200)
 	router.OPTIONS("/remove", auto200)
+	router.OPTIONS("/news", auto200)
 
 	err := router.Run("0.0.0.0:8080")
 	if err != nil {
@@ -76,7 +83,7 @@ func add(c *gin.Context) {
 		return
 	}
 
-	var message commandMessage
+	var message CommandMessage
 
 	err = json.Unmarshal(body, &message)
 
@@ -101,7 +108,7 @@ func remove(c *gin.Context) {
 		return
 	}
 
-	var message commandMessage
+	var message CommandMessage
 
 	err = json.Unmarshal(body, &message)
 
@@ -126,4 +133,8 @@ func remove(c *gin.Context) {
 
 	dataBase.remove(message.User, message.Channel, message.Topic)
 
+}
+
+func news(c *gin.Context) {
+	// TODO()
 }

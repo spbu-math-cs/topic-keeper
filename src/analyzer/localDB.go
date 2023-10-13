@@ -10,20 +10,20 @@ type SafeStorage interface {
 	remove(parameter1 string, parameter2 string, parameter3 string)
 }
 
-// хранение [ канал - [ топик - время новости ] ]
-type channelTopicTime struct {
+// ChannelTopicTime хранение [ канал - [ топик - время новости ] ]
+type ChannelTopicTime struct {
 	mut        sync.RWMutex
 	topicTimes map[string]map[string]time.Time
 }
 
-func (c *channelTopicTime) add(parameter1 string, parameter2 string, _ string) {
+func (c *ChannelTopicTime) add(parameter1 string, parameter2 string, _ string) {
 	channel, topic := parameter1, parameter2
 
 	c.topicTimes[channel][topic] = time.Now().Add(-24 * time.Hour)
 
 }
 
-func (c *channelTopicTime) remove(parameter1 string, parameter2 string, _ string) {
+func (c *ChannelTopicTime) remove(parameter1 string, parameter2 string, _ string) {
 	channel, topic := parameter1, parameter2
 	delete(c.topicTimes[channel], topic)
 	if len(c.topicTimes[channel]) == 0 {
@@ -31,14 +31,14 @@ func (c *channelTopicTime) remove(parameter1 string, parameter2 string, _ string
 	}
 }
 
-// хранение [ название канала - [ топик  - кол-во ссылок] ]
-type channelTopicCount struct {
+// ChannelTopicCount хранение [ название канала - [ топик  - кол-во ссылок] ]
+type ChannelTopicCount struct {
 	mut         sync.RWMutex
 	topicCounts map[string]map[string]uint64
-	topicTime   *channelTopicTime
+	topicTime   *ChannelTopicTime
 }
 
-func (c *channelTopicCount) add(parameter1 string, parameter2 string, _ string) {
+func (c *ChannelTopicCount) add(parameter1 string, parameter2 string, _ string) {
 	channel, topic := parameter1, parameter2
 	c.topicCounts[channel][topic] += 1
 	if c.topicCounts[channel][topic] == 1 {
@@ -46,7 +46,7 @@ func (c *channelTopicCount) add(parameter1 string, parameter2 string, _ string) 
 	}
 }
 
-func (c *channelTopicCount) remove(parameter1 string, parameter2 string, _ string) {
+func (c *ChannelTopicCount) remove(parameter1 string, parameter2 string, _ string) {
 	channel, topic := parameter1, parameter2
 
 	if c.topicCounts[channel][topic] <= 1 {
@@ -60,14 +60,14 @@ func (c *channelTopicCount) remove(parameter1 string, parameter2 string, _ strin
 	}
 }
 
-// хранение [ пользователь - [ канал  -  топики ] ]
-type usersChannelsTopics struct {
+// UsersChannelsTopics хранение [ пользователь - [ канал  -  топики ] ]
+type UsersChannelsTopics struct {
 	mut           sync.RWMutex
 	channelTopics map[string]map[string]map[string]struct{}
-	topicCount    *channelTopicCount
+	topicCount    *ChannelTopicCount
 }
 
-func (u *usersChannelsTopics) add(parameter1 string, parameter2 string, parameter3 string) {
+func (u *UsersChannelsTopics) add(parameter1 string, parameter2 string, parameter3 string) {
 	user, channel, topic := parameter1, parameter2, parameter3
 	_, ok := u.channelTopics[user][channel][topic]
 	if !ok {
@@ -75,7 +75,7 @@ func (u *usersChannelsTopics) add(parameter1 string, parameter2 string, paramete
 	}
 }
 
-func (u *usersChannelsTopics) remove(parameter1 string, parameter2 string, parameter3 string) {
+func (u *UsersChannelsTopics) remove(parameter1 string, parameter2 string, parameter3 string) {
 	user, channel, topic := parameter1, parameter2, parameter3
 	_, ok := u.channelTopics[user][channel][topic]
 	if ok {
