@@ -31,17 +31,17 @@ var (
 	topicTimes    ChannelTopicTime
 	topicCount    ChannelTopicCount
 	dataBase      UsersChannelsTopics
-	analyzer      Analyzer
-	summarizer    MessageSummarizer
+	analyzer      BasicTextAnalyzer
+	summarizer    Summarizer
 	summaryLength = 100
 )
 
 func main() {
 
-	dataBase.topicCount = &topicCount
 	topicCount.topicTime = &topicTimes
-	summarizer.textLength = summaryLength
-	analyzer.summarizer = summarizer
+	dataBase.topicCount = &topicCount
+	summarizer = MessageSummarizer{textLength: summaryLength}
+	analyzer = Analyzer{}
 
 	router := gin.Default()
 
@@ -65,21 +65,21 @@ func auto200(c *gin.Context) {
 	c.Header("Access-Control-Allow-Credentials", "true")
 }
 
-func setError(c *gin.Context, code int, message string) {
+func setAnswer(c *gin.Context, code int, message string) {
 	c.JSON(code, gin.H{
-		"error information": message,
+		"message": message,
 	})
 }
 
 func add(c *gin.Context) {
-	dataBase.mut.Lock()
-	defer dataBase.mut.Unlock()
+	dataBase.lock()
+	defer dataBase.unLock()
 	fmt.Println(c.Request.Header)
 
 	body, err := ioutil.ReadAll(c.Request.Body)
 
 	if err != nil {
-		setError(c, http.StatusInternalServerError, "body reading error")
+		setAnswer(c, http.StatusInternalServerError, "body reading error")
 		return
 	}
 
@@ -88,23 +88,26 @@ func add(c *gin.Context) {
 	err = json.Unmarshal(body, &message)
 
 	if err != nil {
-		setError(c, http.StatusInternalServerError, "json parsing error")
+		setAnswer(c, http.StatusInternalServerError, "json parsing error")
 		return
 	}
 
-	dataBase.add(message.User, message.Channel, message.Topic)
+	err = dataBase.add(message.User, message.Channel, message.Topic)
+	if err != nil {
+		return
+	}
 
 }
 
 func remove(c *gin.Context) {
-	dataBase.mut.Lock()
-	defer dataBase.mut.Unlock()
+	dataBase.lock()
+	defer dataBase.unLock()
 	fmt.Println(c.Request.Header)
 
 	body, err := ioutil.ReadAll(c.Request.Body)
 
 	if err != nil {
-		setError(c, http.StatusInternalServerError, "body reading error")
+		setAnswer(c, http.StatusInternalServerError, "body reading error")
 		return
 	}
 
@@ -113,28 +116,34 @@ func remove(c *gin.Context) {
 	err = json.Unmarshal(body, &message)
 
 	if err != nil {
-		setError(c, http.StatusInternalServerError, "json parsing error")
+		setAnswer(c, http.StatusInternalServerError, "json parsing error")
 		return
 	}
 
-	_, ok := dataBase.channelTopics[message.User]
-	if !ok {
-		setError(c, http.StatusBadRequest, "can`t find user")
-		delete(dataBase.channelTopics, message.User)
-		return
+	err = dataBase.remove(message.User, message.Channel, message.Topic)
+	if err != nil {
+		setAnswer(c, http.StatusBadRequest, err.Error())
 	}
-
-	_, ok = dataBase.channelTopics[message.User][message.Channel]
-	if !ok {
-		setError(c, http.StatusBadRequest, "can`t find channel in this user`s channels")
-		delete(dataBase.channelTopics[message.User], message.Channel)
-		return
-	}
-
-	dataBase.remove(message.User, message.Channel, message.Topic)
 
 }
 
 func news(c *gin.Context) {
-	// TODO()
+
+	dataBase.lock()
+	defer dataBase.unLock()
+
+	body, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		setAnswer(c, http.StatusInternalServerError, "body reading error")
+		return
+	}
+
+	expected := NewsMessage{}
+
+	err = json.Unmarshal(body, &expected)
+	if err != nil {
+		setAnswer(c, http.StatusInternalServerError, "json parsing error")
+		return
+	}
+
 }
