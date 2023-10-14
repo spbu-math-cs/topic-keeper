@@ -6,13 +6,30 @@ import (
 	"time"
 )
 
+type Property string
+
+const (
+	Time     Property = "time"
+	Channels Property = "channels"
+	Topic    Property = "topic"
+	Topics   Property = "topics"
+	Count    Property = "count"
+)
+
+var (
+	invalidPropertyError = errors.New("invalid property type")
+	invalidChannelError  = errors.New("can`t find channel")
+	invalidTopicError    = errors.New("can`t find topic")
+	invalidUserError     = errors.New("can`t find user")
+	unreachableCodeError = errors.New("unreachable code")
+	notImplementedError  = errors.New("this function is not implemented")
+)
+
 type SafeStorage interface {
-	add(parameter1 string, parameter2 string, parameter3 string) error
-	remove(parameter1 string, parameter2 string, parameter3 string) error
-	get(parameter1 string, parameter2 string) (any, error)
-	set(parameter1 string, parameter2 string) error
-	lock()
-	unLock()
+	add(parameter1 string, parameter2 string, parameter3 string, property Property) error
+	remove(parameter1 string, parameter2 string, parameter3 string, property Property) error
+	get(parameter1 string, parameter2 string, property Property) (any, error)
+	set(parameter1 string, parameter2 string, property Property) error
 }
 
 // ChannelTopicTime хранение [ канал - [ топик - время новости ] ]
@@ -21,174 +38,295 @@ type ChannelTopicTime struct {
 	topicTimes map[string]map[string]time.Time
 }
 
-func (c *ChannelTopicTime) add(parameter1 string, parameter2 string, _ string) error {
-	channel, topic := parameter1, parameter2
-
-	c.topicTimes[channel][topic] = time.Now().Add(-24 * time.Hour)
-
-	return nil
-
-}
-
-func (c *ChannelTopicTime) remove(parameter1 string, parameter2 string, _ string) error {
-	channel, topic := parameter1, parameter2
-	delete(c.topicTimes[channel], topic)
-	if len(c.topicTimes[channel]) == 0 {
-		delete(c.topicTimes, channel)
-	}
-	return nil
-}
-
-func (c *ChannelTopicTime) lock() {
+func (c *ChannelTopicTime) add(parameter1 string, parameter2 string, _ string, property Property) error {
 	c.mut.Lock()
+	defer c.mut.Unlock()
+
+	channel, topic := parameter1, parameter2
+
+	switch property {
+	case Topic:
+		_, ok := c.topicTimes[channel]
+		if !ok {
+			delete(c.topicTimes, channel)
+			return invalidChannelError
+		}
+		_, ok = c.topicTimes[channel][topic]
+		if !ok {
+			delete(c.topicTimes[channel], topic)
+			return invalidTopicError
+		}
+		c.topicTimes[channel][topic] = time.Now().Add(-24 * time.Hour)
+		return nil
+	default:
+		return invalidPropertyError
+	}
+
+	return unreachableCodeError
 }
 
-func (c *ChannelTopicTime) unLock() {
+func (c *ChannelTopicTime) remove(parameter1 string, parameter2 string, _ string, property Property) error {
+	c.mut.Lock()
+	defer c.mut.Unlock()
+
+	channel, topic := parameter1, parameter2
+	switch property {
+	case Topic:
+		_, ok := c.topicTimes[channel]
+		if !ok {
+			delete(c.topicTimes, channel)
+			return invalidChannelError
+		}
+
+		delete(c.topicTimes[channel], topic)
+		if len(c.topicTimes[channel]) == 0 {
+			delete(c.topicTimes, channel)
+		}
+		return nil
+	default:
+		return invalidPropertyError
+	}
+
+	return unreachableCodeError
+}
+
+func (c *ChannelTopicTime) get(parameter1 string, parameter2 string, property Property) (any, error) {
+	c.mut.Lock()
 	c.mut.Unlock()
-}
 
-func (c *ChannelTopicTime) get(parameter1 string, parameter2 string) (any, error) {
 	channel, topic := parameter1, parameter2
+
 	_, ok := c.topicTimes[channel]
 	if !ok {
 		delete(c.topicTimes, channel)
-		return nil, errors.New("can`t find channel")
+		return nil, invalidChannelError
 	}
-	_, ok = c.topicTimes[channel][topic]
-	if !ok {
-		delete(c.topicTimes[channel], topic)
-		return nil, errors.New("can`t find topic")
+
+	switch property {
+	case Time:
+		_, ok = c.topicTimes[channel][topic]
+		if !ok {
+			delete(c.topicTimes[channel], topic)
+			return nil, invalidTopicError
+		}
+
+		return c.topicTimes[channel][topic], nil
+	case Topics:
+		return c.topicTimes[channel], nil
+	default:
+		return nil, invalidPropertyError
 	}
-	return c.topicTimes[channel][topic], nil
+
+	return nil, unreachableCodeError
 }
 
-func (c *ChannelTopicTime) set(parameter1 string, parameter2 string) error {
+func (c *ChannelTopicTime) set(parameter1 string, parameter2 string, property Property) error {
+	c.mut.Lock()
+	c.mut.Unlock()
+
 	channel, topic := parameter1, parameter2
+
 	_, ok := c.topicTimes[channel]
 	if !ok {
 		delete(c.topicTimes, channel)
-		return errors.New("can`t find channel")
+		return invalidChannelError
 	}
-	_, ok = c.topicTimes[channel][topic]
-	if !ok {
-		delete(c.topicTimes[channel], topic)
-		return errors.New("can`t find topic")
+
+	switch property {
+	case Time:
+		_, ok = c.topicTimes[channel][topic]
+		if !ok {
+			delete(c.topicTimes[channel], topic)
+			return invalidTopicError
+		}
+
+		c.topicTimes[channel][topic] = time.Now()
+
+		return nil
+
+	default:
+		return invalidPropertyError
 	}
-	c.topicTimes[channel][topic] = time.Now()
-	return nil
+
+	return unreachableCodeError
 }
 
 // ChannelTopicCount хранение [ название канала - [ топик  - кол-во ссылок] ]
 type ChannelTopicCount struct {
 	mut         sync.RWMutex
 	topicCounts map[string]map[string]uint64
-	topicTime   *ChannelTopicTime
 }
 
-func (c *ChannelTopicCount) add(parameter1 string, parameter2 string, _ string) error {
+func (c *ChannelTopicCount) add(parameter1 string, parameter2 string, _ string, property Property) error {
+	c.mut.Lock()
+	defer c.mut.Unlock()
+
 	channel, topic := parameter1, parameter2
-	c.topicCounts[channel][topic] += 1
-	return nil
+
+	switch property {
+	case Topic:
+		_, ok := c.topicCounts[channel]
+		if !ok {
+			delete(c.topicCounts, channel)
+			return invalidChannelError
+		}
+		_, ok = c.topicCounts[channel][topic]
+		if !ok {
+			delete(c.topicCounts[channel], topic)
+			return invalidTopicError
+		}
+		c.topicCounts[channel][topic] += 1
+		return nil
+	default:
+		return invalidPropertyError
+	}
+
+	return unreachableCodeError
+
 }
 
-func (c *ChannelTopicCount) remove(parameter1 string, parameter2 string, _ string) error {
+func (c *ChannelTopicCount) remove(parameter1 string, parameter2 string, _ string, property Property) error {
+	c.mut.Lock()
+	defer c.mut.Unlock()
+
 	channel, topic := parameter1, parameter2
 
-	if c.topicCounts[channel][topic] <= 1 {
-		delete(c.topicCounts[channel], topic)
+	switch property {
+	case Topic:
+		_, ok := c.topicCounts[channel]
+		if !ok {
+			delete(c.topicCounts, channel)
+			return invalidChannelError
+		}
+		_, ok = c.topicCounts[channel][topic]
+		if !ok {
+			delete(c.topicCounts[channel], topic)
+			return invalidTopicError
+		}
+		c.topicCounts[channel][topic] -= 1
+
+		if c.topicCounts[channel][topic] == 0 {
+			delete(c.topicCounts[channel], topic)
+		}
 		if len(c.topicCounts[channel]) == 0 {
 			delete(c.topicCounts, channel)
 		}
-	} else {
-		c.topicCounts[channel][topic]--
+		return nil
+	default:
+		return invalidPropertyError
 	}
 
-	return nil
+	return unreachableCodeError
 }
 
-func (c *ChannelTopicCount) lock() {
+func (c *ChannelTopicCount) get(parameter1 string, parameter2 string, property Property) (any, error) {
 	c.mut.Lock()
+	defer c.mut.Unlock()
+
+	channel, topic := parameter1, parameter2
+
+	_, ok := c.topicCounts[channel]
+	if !ok {
+		delete(c.topicCounts, channel)
+		return nil, invalidChannelError
+	}
+	_, ok = c.topicCounts[channel][topic]
+	if !ok {
+		delete(c.topicCounts[channel], topic)
+		return nil, invalidTopicError
+	}
+
+	switch property {
+	case Count:
+		return c.topicCounts[channel][topic], nil
+	default:
+		return nil, invalidPropertyError
+	}
+
+	return nil, unreachableCodeError
 }
 
-func (c *ChannelTopicCount) unLock() {
-	c.mut.Unlock()
-}
-
-func (c *ChannelTopicCount) get(parameter1 string, parameter2 string) (any, error) {
-	return c.topicTime.get(parameter1, parameter2)
-}
-
-func (c *ChannelTopicCount) set(parameter1 string, parameter2 string) error {
-	return c.topicTime.set(parameter1, parameter2)
+func (c *ChannelTopicCount) set(_ string, _ string, _ Property) error {
+	return notImplementedError
 }
 
 // UsersChannelsTopics хранение [ пользователь - [ канал  -  топики ] ]
 type UsersChannelsTopics struct {
 	mut           sync.RWMutex
 	channelTopics map[string]map[string]map[string]struct{}
-	topicCount    *ChannelTopicCount
 }
 
-func (c *UsersChannelsTopics) add(parameter1 string, parameter2 string, parameter3 string) error {
+func (u *UsersChannelsTopics) add(parameter1 string, parameter2 string, parameter3 string, _ Property) error {
 	user, channel, topic := parameter1, parameter2, parameter3
-	_, ok := c.channelTopics[user][channel][topic]
-	if !ok {
-		err := c.topicCount.add(channel, topic, "")
-		if err != nil {
-			return err
-		}
-	}
-
+	_ = u.channelTopics[user][channel][topic]
 	return nil
 }
 
-func (c *UsersChannelsTopics) remove(parameter1 string, parameter2 string, parameter3 string) error {
-
+func (u *UsersChannelsTopics) remove(parameter1 string, parameter2 string, parameter3 string, property Property) error {
 	user, channel, topic := parameter1, parameter2, parameter3
-
-	_, ok := c.channelTopics[user]
+	_, ok := u.channelTopics[user]
 	if !ok {
-		delete(c.channelTopics, user)
-		return errors.New("can`t find user")
+		delete(u.channelTopics, user)
+		return invalidUserError
 	}
 
-	_, ok = c.channelTopics[user][channel]
+	_, ok = u.channelTopics[user][channel]
 	if !ok {
-		delete(c.channelTopics[user], channel)
-		return errors.New("can`t find channel in this user`s channels")
+		delete(u.channelTopics[user], channel)
+		return invalidChannelError
 	}
 
-	_, ok = c.channelTopics[user][channel][topic]
-	if ok {
-		err := c.topicCount.remove(channel, topic, "")
-		if err != nil {
-			return err
-		}
+	_, ok = u.channelTopics[user][channel][topic]
+	if !ok {
+		delete(u.channelTopics[user][channel], topic)
+		return invalidTopicError
 	}
 
-	delete(c.channelTopics[user][channel], topic)
-	if len(c.channelTopics[user][channel]) == 0 {
-		delete(c.channelTopics[user], channel)
-		if len(c.channelTopics[user]) == 0 {
-			delete(c.channelTopics, user)
-		}
-	}
+	delete(u.channelTopics[user][channel], topic)
 
+	if len(u.channelTopics[user][channel]) == 0 {
+		delete(u.channelTopics[user], channel)
+	}
+	if len(u.channelTopics[user]) == 0 {
+		delete(u.channelTopics, user)
+	}
 	return nil
 }
 
-func (c *UsersChannelsTopics) lock() {
-	c.mut.Lock()
+func (u *UsersChannelsTopics) get(parameter1 string, parameter2 string, property Property) (any, error) {
+	var user, channel = parameter1, parameter2
+	switch property {
+	case Channels:
+		_, ok := u.channelTopics[user]
+		if !ok {
+			delete(u.channelTopics, user)
+			return nil, invalidUserError
+		}
+
+		return u.channelTopics[user], nil
+	case Topics:
+
+		_, ok := u.channelTopics[user]
+		if !ok {
+			delete(u.channelTopics, user)
+			return nil, invalidUserError
+		}
+
+		_, ok = u.channelTopics[user][channel]
+		if !ok {
+			delete(u.channelTopics[user], channel)
+			return nil, invalidChannelError
+		}
+		return u.channelTopics[user][channel], nil
+
+	default:
+		return nil, invalidPropertyError
+	}
+
+	return nil, unreachableCodeError
+
 }
 
-func (c *UsersChannelsTopics) unLock() {
-	c.mut.Unlock()
-}
-
-func (c *UsersChannelsTopics) get(parameter1 string, parameter2 string) (any, error) {
-	return c.topicCount.get(parameter1, parameter2)
-}
-
-func (c *UsersChannelsTopics) set(parameter1 string, parameter2 string) error {
-	return c.topicCount.set(parameter1, parameter2)
+func (u *UsersChannelsTopics) set(_ string, _ string, _ Property) error {
+	return notImplementedError
 }
