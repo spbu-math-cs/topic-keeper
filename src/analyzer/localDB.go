@@ -257,12 +257,17 @@ type UsersChannelsTopics struct {
 }
 
 func (u *UsersChannelsTopics) add(parameter1 string, parameter2 string, parameter3 string, _ Property) error {
+	u.mut.Lock()
+	defer u.mut.Unlock()
 	user, channel, topic := parameter1, parameter2, parameter3
 	_ = u.channelTopics[user][channel][topic]
 	return nil
 }
 
 func (u *UsersChannelsTopics) remove(parameter1 string, parameter2 string, parameter3 string, property Property) error {
+	u.mut.Lock()
+	defer u.mut.Unlock()
+
 	user, channel, topic := parameter1, parameter2, parameter3
 	_, ok := u.channelTopics[user]
 	if !ok {
@@ -294,6 +299,8 @@ func (u *UsersChannelsTopics) remove(parameter1 string, parameter2 string, param
 }
 
 func (u *UsersChannelsTopics) get(parameter1 string, parameter2 string, property Property) (any, error) {
+	u.mut.Lock()
+	defer u.mut.Unlock()
 	var user, channel = parameter1, parameter2
 	switch property {
 	case Channels:
