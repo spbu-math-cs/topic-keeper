@@ -7,8 +7,7 @@ import (
 
 func TestContainsKeyWord(t *testing.T) {
 
-	var analyzer BasicTextAnalyzer
-	analyzer = &Analyzer{}
+	var analyzer Analyzer
 
 	for _, tc := range []struct {
 		input string
@@ -28,8 +27,7 @@ func TestContainsKeyWord(t *testing.T) {
 }
 
 func TestDoesntContainKeyWord(t *testing.T) {
-	var analyzer BasicTextAnalyzer
-	analyzer = &Analyzer{}
+	var analyzer Analyzer
 
 	for _, tc := range []struct {
 		input string
