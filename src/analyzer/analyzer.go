@@ -8,7 +8,7 @@ type BasicTextAnalyzer interface {
 
 type Analyzer struct{}
 
-func (a Analyzer) contains(text string, keyWord string) float64 {
+func (a *Analyzer) contains(text string, keyWord string) float64 {
 	text = strings.ToLower(text)
 	keyWord = strings.ToLower(keyWord)
 	if strings.Contains(text, keyWord) {
@@ -17,7 +17,12 @@ func (a Analyzer) contains(text string, keyWord string) float64 {
 	return 0.0
 }
 
-func (a Analyzer) analyze(topics map[string]struct{}, message string) ([]string, error) {
-	//TODO() нужно будет возвращать подходящие топики и ошибку
-	panic("implement me")
+func (a *Analyzer) analyze(topics map[string]struct{}, message string) ([]string, error) {
+	var answer []string
+	for topic, _ := range topics {
+		if a.contains(message, topic) != 0.0 {
+			answer = append(answer, topic)
+		}
+	}
+	return answer, nil
 }

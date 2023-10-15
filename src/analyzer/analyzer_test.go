@@ -1,36 +1,9 @@
 package main
 
-//import "testing"
-//
-//package main
-
 import (
 	_ "runtime/debug"
 	"testing"
 )
-
-/*
-func TestIncorrectInput(t *testing.T) {
-	for _, tc := range []struct {
-		input string
-		err   string
-	}{
-		{"(x))", "Unbalanced parenthesis"},
-		{"sin(x + 2) - cos(5)", "Invalid input"},
-		{"x=2 5+x - 12", "Invalid input"},
-		{"tg(tralala)", "Invalid input"},
-		{"5 ** z - sqrt(-12)", "Invalid input"},
-		{"xyz % x >= yz", "Invalid input"},
-		{"123s32 - 123", "Invalid input"},
-		{"sqrtx(25)", "Invalid input"},
-	} {
-		_, err := calculate(tc.input)
-		if err == nil {
-			t.Errorf("Undetected error in %s", tc.input)
-		}
-	}
-}
-*/
 
 func TestContainsKeyWord(t *testing.T) {
 
