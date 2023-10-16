@@ -7,7 +7,7 @@ import (
 
 func TestContainsKeyWord(t *testing.T) {
 
-	var analyzer Analyzer
+	var analyzerTest Analyzer
 
 	for _, tc := range []struct {
 		input string
@@ -19,7 +19,7 @@ func TestContainsKeyWord(t *testing.T) {
 		{"Дедлайны эти уже надоели, честно говоря", "дедлайн"},
 		{"Елизавета, добрый вечер", "Елизавета"},
 	} {
-		res := analyzer.contains(tc.input, tc.sub)
+		res := analyzerTest.contains(tc.input, tc.sub)
 		if res != 1.0 {
 			t.Errorf("Didn't find %s in %s", tc.sub, tc.input)
 		}
@@ -27,7 +27,7 @@ func TestContainsKeyWord(t *testing.T) {
 }
 
 func TestDoesntContainKeyWord(t *testing.T) {
-	var analyzer Analyzer
+	var analyzerTest Analyzer
 
 	for _, tc := range []struct {
 		input string
@@ -39,7 +39,7 @@ func TestDoesntContainKeyWord(t *testing.T) {
 		{"Дедлайны эти уже надоели, честно говоря", "Дедлайнч"},
 		{"Елизавета, добрый вечер", "Елизавета Сергеевна"},
 	} {
-		res := analyzer.contains(tc.input, tc.sub)
+		res := analyzerTest.contains(tc.input, tc.sub)
 		if res != 0.0 {
 			t.Errorf("Didn't find %s in %s", tc.sub, tc.input)
 		}
