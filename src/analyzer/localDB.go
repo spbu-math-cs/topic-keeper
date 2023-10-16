@@ -122,8 +122,10 @@ func (c *ChannelTopicTime) get(parameter1 string, _ string, property Property) (
 		var m []string
 
 		for topic, last := range c.topicTimes[channel] {
-			if time.Now().Add(c.interval).After(last) && !slices.Contains(m, topic) {
+			var cur = time.Now().Add(-c.interval)
+			if cur.After(last) && !slices.Contains(m, topic) {
 				m = append(m, topic)
+				c.topicTimes[channel][topic] = time.Now()
 			}
 		}
 		return m, nil
@@ -378,7 +380,7 @@ func (u *UsersChannelsTopics) get(parameter1 string, parameter2 string, property
 	case UsersTopicsByChannel:
 
 		channel := parameter1
-		var m map[string]map[string]struct{}
+		var m = make(map[string]map[string]struct{})
 
 		for user, userChannels := range u.channelTopics {
 			topics, ok := userChannels[channel]
