@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"slices"
 	"sync"
 	"time"
 )
@@ -123,7 +122,7 @@ func (c *ChannelTopicTime) get(parameter1 string, _ string, property Property) (
 
 		for topic, last := range c.topicTimes[channel] {
 			var cur = time.Now().Add(-c.interval)
-			if cur.After(last) && !slices.Contains(m, topic) {
+			if cur.After(last) && contains(m, topic) {
 				m = append(m, topic)
 				c.topicTimes[channel][topic] = time.Now()
 			}

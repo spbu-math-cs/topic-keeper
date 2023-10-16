@@ -2,11 +2,6 @@ module analyzer
 
 go 1.20
 
-<<<<<<< HEAD
-require github.com/apex/log v1.9.0
-
-require github.com/pkg/errors v0.8.1 // indirect
-=======
 require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/jackc/pgx/v4 v4.18.1
@@ -45,4 +40,3 @@ require (
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
->>>>>>> origin/Iskander-gh-8-analyze-channels

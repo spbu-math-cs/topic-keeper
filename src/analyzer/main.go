@@ -1,22 +1,15 @@
 package main
 
 import (
-<<<<<<< HEAD
-	"github.com/apex/log"
-)
-
-func main() {
-	log.Info("Hi, I am analyzer!")
-=======
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	_ "github.com/jackc/pgx/v4/stdlib"
 	"io/ioutil"
 	"net/http"
-	"slices"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	_ "github.com/jackc/pgx/v4/stdlib"
 )
 
 type CommandMessage struct {
@@ -213,7 +206,7 @@ func news(c *gin.Context) {
 
 	for user, userTopicsInChannel := range usersTopicInChannel {
 		for topic, _ := range userTopicsInChannel {
-			if slices.Contains(topicsInMessage, topic) {
+			if contains(topicsInMessage, topic) {
 				_, ok = sendMessageMap[user]
 				if !ok {
 					sendMessageMap[user] = ReturnMessage{
@@ -248,5 +241,4 @@ func news(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, string(data))
->>>>>>> origin/Iskander-gh-8-analyze-channels
 }
