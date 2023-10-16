@@ -1,6 +1,16 @@
+<<<<<<< HEAD
 go 1.20
 
 use (
     ./src/analyzer
     ./src/flow
+=======
+go 1.21
+
+toolchain go1.21.3
+
+use (
+	./src/analyzer
+	./src/flow
+>>>>>>> origin/Iskander-gh-8-analyze-channels
 )
