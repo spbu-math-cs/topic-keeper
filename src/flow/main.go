@@ -1,7 +1,8 @@
 package main
 
 import (
-	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -9,18 +10,40 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-type ChannelData struct {
-	Command string `json:"command"`
-	Name    string `json:"name"`
-	Topic   string `json:"topic"`
+var wrongFmtError = errors.New("Неправильный формат команды")
+
+var (
+	api API
+	bot *tgbotapi.BotAPI
+)
+
+func parseTopic(s string) (Concern, error) {
+	s = strings.TrimSpace(s)
+	chanName, topicName, found := strings.Cut(s, " ")
+	if !found {
+		return Concern{}, wrongFmtError
+	}
+	chanName = strings.Trim(chanName, "\n ")
+	if !strings.HasPrefix(chanName, "@") {
+		return Concern{}, wrongFmtError
+	}
+	return Concern{
+		Channel: chanName[1:],
+		Topic:   topicName,
+	}, nil
 }
 
 //echo $TOPIC_KEEPER_TOKEN
 //export TOPIC_KEEPER_TOKEN="6638697091:AAHhpaS-rXlgWXHQzlfa3tAGUoRctKp8n2Q"
 
+var users map[string]int64
+
 func main() {
+	users = map[string]int64{}
 	token := os.Getenv("TOPIC_KEEPER_TOKEN")
-	bot, err := tgbotapi.NewBotAPI(token)
+
+	var err error
+	bot, err = tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -39,77 +62,122 @@ func main() {
 			tgbotapi.NewKeyboardButton("/view"),
 			tgbotapi.NewKeyboardButton("/add"),
 			tgbotapi.NewKeyboardButton("/remove"),
+			tgbotapi.NewKeyboardButton("/help"),
 		),
 	)
 
+	api = basicAPI{}
 	for update := range updates {
+		if update.ChannelPost != nil {
+			username := update.ChannelPost.Chat.UserName
+			msg := update.ChannelPost.Text
+			resp, err := api.postMessage(username, msg)
+			if err != nil {
+				log.Println(err.Error())
+				continue
+			}
+			for _, e := range resp {
+				sendMessage(e.User, e.Summary)
+			}
+			continue
+		}
 		if update.Message == nil {
 			continue
 		}
 
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Выберите команду:")
 		msg.ReplyMarkup = keyboard
-		switch update.Message.Text {
+
+		updText := strings.Trim(update.Message.Text, "\n ")
+		uname := update.Message.Chat.UserName
+		users[uname] = update.Message.Chat.ID
+
+		switch updText {
 		case "/start":
-			handleStart(bot, update.Message.Chat.ID)
+			handleStart(uname)
 		case "/view":
-			handleView(bot, update.Message.Chat.ID)
+			handleView(uname)
+		case "/help":
+			handleHelp(uname)
 		default:
-			if strings.HasPrefix(update.Message.Text, "/remove") || strings.HasPrefix(update.Message.Text, "/add") {
-				handleRemoveAdd(bot, update.Message.Chat.ID, update.Message.Text)
+			if strings.HasPrefix(updText, "/add") {
+				handleAdd(uname, updText)
+			} else if strings.HasPrefix(updText, "/remove") {
+				handleRemove(uname, updText)
 			} else {
-				handleUnknownCommand(bot, update.Message.Chat.ID)
+				handleUnknownCommand(uname)
 			}
 		}
 	}
 }
 
-func sendMessage(bot *tgbotapi.BotAPI, chatID int64, text string) {
-	msg := tgbotapi.NewMessage(chatID, text)
+func sendMessage(username string, text string) {
+	userId, ok := users[username]
+	if !ok {
+		panic("!ok")
+	}
+	msg := tgbotapi.NewMessage(userId, text)
 	_, err := bot.Send(msg)
 	if err != nil {
-		log.Panic(err)
+		log.Println(err.Error())
 	}
 }
 
-func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
-	reply := "Привет! Это ботик для обработки команд /start, /view, /add и /remove."
-	sendMessage(bot, chatID, reply)
+func handleStart(username string) {
+	reply := "Привет! Бот предназначен для помощи в быстром и эффективном поиске нужной информации в чатах и темах на основе предоставленного списка."
+	sendMessage(username, reply)
+	handleHelp(username)
 }
 
-func handleView(bot *tgbotapi.BotAPI, chatID int64) {
-	//как-то взять json распарсить и вывести корректно
-	reply := "Список каналов с выранными темами: \n Канал: Как стать миллионером \n Темы: новичок"
-	sendMessage(bot, chatID, reply)
+func handleHelp(username string) {
+	reply := "\n Мой набор команд включает в себя следующие опции:" + "\n" +
+		"/view - для просмотра доступных каналов и связанных с ними тем. \n \n" +
+		"/remove <@название канала> <слово> - удаляет указанное слово из списка для поиска в конкретном канале.\n \n " +
+		"/add <@название канала> <слово> - добавляет указанное слово в список для поиска в конкретном канале. \n \n " +
+		"Эти команды помогут вам управлять списком тем и слов для поиска, чтобы быстро находить нужную информацию в чатах."
+	sendMessage(username, reply)
 }
 
-func handleRemoveAdd(bot *tgbotapi.BotAPI, chatID int64, text string) {
-	args := strings.Fields(text)
-	if len(args) == 3 {
-		command := strings.TrimLeft(args[0], "/")
-		channelData := ChannelData{Command: command, Name: args[1], Topic: args[2]}
-		channelJSON, _ := json.Marshal(channelData)
-
-		//отправка бэку
-		// Отправка данных на бэкенд
-		err := sendJSONToBackend(channelJSON, "add")
-		if err != nil {
-			sendMessage(bot, chatID, "Ошибка в полученных данных"+err.Error())
-		} else {
-			sendMessage(bot, chatID, "Данные успешно зафиксированы")
-		}
-		sendMessage(bot, chatID, "JSON данных канала: "+string(channelJSON))
-	} else {
-		handleUnknownCommand(bot, chatID)
+func handleView(username string) {
+	resp, err := api.viewTopics(username)
+	if err != nil {
+		sendMessage(username, err.Error())
+		return
 	}
+	sendMessage(username, fmt.Sprintln(resp))
 }
 
-func handleUnknownCommand(bot *tgbotapi.BotAPI, chatID int64) {
+func handleAdd(username string, msg string) {
+	after, _ := strings.CutPrefix(msg, "/add")
+	topic, err := parseTopic(after)
+	fmt.Println(topic)
+	if err != nil {
+		sendMessage(username, err.Error())
+		return
+	}
+	if err := api.addTopic(username, topic); err != nil {
+		sendMessage(username, err.Error())
+		return
+	}
+	sendMessage(username, "Топик добавлен!")
+}
+
+func handleRemove(username, msg string) {
+	after, _ := strings.CutPrefix(msg, "/remove")
+	topic, err := parseTopic(after)
+	fmt.Println(topic)
+	if err != nil {
+		sendMessage(username, err.Error())
+		return
+	}
+	if err := api.removeTopic(username, topic); err != nil {
+		sendMessage(username, err.Error())
+		return
+	}
+	sendMessage(username, "Топик удалён!")
+}
+
+func handleUnknownCommand(username string) {
 	reply := "Я не понимаю вашей команды. Воспользуйтесь \n /start \n /view \n /remove <name> <topic> \n /add <name> <topic>"
-	sendMessage(bot, chatID, reply)
-}
-
-func sendJSONToBackend(jsonData []byte, endpoint string) error {
-	//отправка json
-	return nil
+	sendMessage(username, reply)
 }
