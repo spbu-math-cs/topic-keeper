@@ -49,7 +49,7 @@ var (
 
 const (
 	summaryLength   = 100
-	minimalInterval = 5 * time.Minute
+	minimalInterval = time.Second
 )
 
 func main() {
@@ -213,7 +213,7 @@ func news(c *gin.Context) {
 		return
 	}
 
-	var sendMessageMap map[string]ReturnMessage
+	sendMessageMap := map[string]ReturnMessage{}
 
 	for user, userTopicsInChannel := range usersTopicInChannel {
 		for topic, _ := range userTopicsInChannel {
@@ -245,13 +245,7 @@ func news(c *gin.Context) {
 		bd = append(bd, returnMessage)
 	}
 
-	data, err := json.Marshal(bd)
-	if err != nil {
-		setAnswer(c, http.StatusInternalServerError, "json making error")
-		return
-	}
-
-	c.JSON(http.StatusOK, string(data))
+	c.JSON(http.StatusOK, bd)
 }
 
 func view(c *gin.Context) {
@@ -278,13 +272,7 @@ func view(c *gin.Context) {
 	dataAny, err := dataBase.get(user.User, "", Channels)
 	if err != nil {
 		if errors.Is(err, invalidUserError) {
-			returnData, err := json.Marshal(db)
-			if err != nil {
-				setAnswer(c, http.StatusInternalServerError, "json making error")
-				return
-			}
-
-			c.JSON(http.StatusOK, string(returnData))
+			c.JSON(http.StatusOK, db)
 			return
 		}
 		setAnswer(c, http.StatusInternalServerError, "data bse error")
@@ -303,11 +291,5 @@ func view(c *gin.Context) {
 		}
 	}
 
-	returnData, err := json.Marshal(db)
-	if err != nil {
-		setAnswer(c, http.StatusInternalServerError, "json making error")
-		return
-	}
-
-	c.JSON(http.StatusOK, string(returnData))
+	c.JSON(http.StatusOK, db)
 }

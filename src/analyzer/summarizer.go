@@ -1,7 +1,5 @@
 package main
 
-import "math"
-
 type Summarizer interface {
 	summarize(text string) (string, error)
 }
@@ -11,8 +9,12 @@ type MessageSummarizer struct {
 }
 
 func (m MessageSummarizer) summarize(text string) (string, error) {
+	testRunes := []rune(text)
 
-	length := math.Min(float64(m.textLength), float64(len(text)))
+	length := len(testRunes)
+	if length > m.textLength {
+		length = m.textLength
+	}
 
-	return text[:int(length)-1], nil
+	return string(testRunes[:length]), nil
 }

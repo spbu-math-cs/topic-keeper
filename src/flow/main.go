@@ -36,6 +36,12 @@ func parseTopic(s string) (Concern, error) {
 //echo $TOPIC_KEEPER_TOKEN
 //export TOPIC_KEEPER_TOKEN="6638697091:AAHhpaS-rXlgWXHQzlfa3tAGUoRctKp8n2Q"
 
+const format = `Topic was detected: [%s]
+In channel: @%s
+Summary: %s
+link: https://t.me/%s/%d
+`
+
 var users map[string]int64
 
 func main() {
@@ -76,8 +82,13 @@ func main() {
 				log.Println(err.Error())
 				continue
 			}
+
 			for _, e := range resp {
-				sendMessage(e.User, e.Summary)
+				ans := fmt.Sprintf(format, e.Topic, e.Channel, e.Summary, e.Channel,
+					update.ChannelPost.MessageID)
+
+				sendMessage(e.User, ans)
+
 			}
 			continue
 		}
@@ -144,7 +155,19 @@ func handleView(username string) {
 		sendMessage(username, err.Error())
 		return
 	}
-	sendMessage(username, fmt.Sprintln(resp))
+	topicByChan := map[string][]string{}
+	for _, c := range resp {
+		topicByChan[c.Channel] = append(topicByChan[c.Channel], c.Topic)
+	}
+	str := strings.Builder{}
+	for ch, topics := range topicByChan {
+		str.WriteString(fmt.Sprintf("%s:\n", ch))
+		for _, topic := range topics {
+			str.WriteString(fmt.Sprintf("  - %s\n", topic))
+		}
+		str.WriteString("\n")
+	}
+	sendMessage(username, str.String())
 }
 
 func handleAdd(username string, msg string) {
