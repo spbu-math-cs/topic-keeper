@@ -122,7 +122,7 @@ func (c *ChannelTopicTime) get(parameter1 string, _ string, property Property) (
 
 		for topic, last := range c.topicTimes[channel] {
 			var cur = time.Now().Add(-c.interval)
-			if cur.After(last) && contains(m, topic) {
+			if cur.After(last) {
 				m = append(m, topic)
 				c.topicTimes[channel][topic] = time.Now()
 			}

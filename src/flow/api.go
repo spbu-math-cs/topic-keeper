@@ -11,8 +11,8 @@ import (
 var apiAddr = "localhost:8080"
 
 type Concern struct {
-	Channel string
-	Topic   string
+	Channel string `json:"channel"`
+	Topic   string `json:"topic"`
 }
 
 type ReturnMessage struct {
@@ -55,9 +55,9 @@ func postQuery(uri string, body any) ([]byte, error) {
 
 func (b basicAPI) addTopic(username string, c Concern) error {
 	body := map[string]any{
-		"User":    username,
-		"Channel": c.Channel,
-		"Topic":   c.Topic,
+		"user":    username,
+		"channel": c.Channel,
+		"topic":   c.Topic,
 	}
 	_, err := postQuery(fmt.Sprintf("http://%s/add", apiAddr), body)
 	return err
@@ -65,9 +65,9 @@ func (b basicAPI) addTopic(username string, c Concern) error {
 
 func (b basicAPI) removeTopic(username string, c Concern) error {
 	body := map[string]any{
-		"User":    username,
-		"Channel": c.Channel,
-		"Topic":   c.Topic,
+		"user":    username,
+		"channel": c.Channel,
+		"topic":   c.Topic,
 	}
 	_, err := postQuery(fmt.Sprintf("http://%s/remove", apiAddr), body)
 	return err
@@ -75,13 +75,13 @@ func (b basicAPI) removeTopic(username string, c Concern) error {
 
 func (b basicAPI) viewTopics(username string) ([]Concern, error) {
 	body := map[string]any{
-		"User": username,
+		"user": username,
 	}
 	bodyAsBytes, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/view", apiAddr),
+	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/view", apiAddr),
 		bytes.NewReader(bodyAsBytes))
 	if err != nil {
 		return nil, err
@@ -104,8 +104,8 @@ func (b basicAPI) viewTopics(username string) ([]Concern, error) {
 
 func (b basicAPI) postMessage(chanName string, msg string) ([]ReturnMessage, error) {
 	body := map[string]any{
-		"Channel": chanName,
-		"Text":    msg,
+		"channel": chanName,
+		"text":    msg,
 	}
 	resp, err := postQuery(fmt.Sprintf("http://%s/news", apiAddr), body)
 	if err != nil {
