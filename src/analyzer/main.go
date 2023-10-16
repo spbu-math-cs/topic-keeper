@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"slices"
+	"time"
 )
 
 type CommandMessage struct {
@@ -37,13 +38,16 @@ var (
 	summarizer Summarizer
 )
 
-const summaryLength = 100
+const (
+	summaryLength   = 100
+	minimalInterval = 5 * time.Minute
+)
 
 func main() {
 
 	analyzer = &Analyzer{}
 	summarizer = &MessageSummarizer{textLength: summaryLength}
-	topicTimes = &ChannelTopicTime{}
+	topicTimes = &ChannelTopicTime{interval: minimalInterval}
 	topicTimes.create()
 	topicCount = &ChannelTopicCount{}
 	topicCount.create()
@@ -52,8 +56,8 @@ func main() {
 
 	router := gin.Default()
 
-	router.POST("/add", add)
-	router.POST("/remove", remove)
+	router.GET("/add", add)
+	router.GET("/remove", remove)
 	router.POST("/news", news)
 
 	router.OPTIONS("/add", auto200)
@@ -178,13 +182,13 @@ func news(c *gin.Context) {
 		return
 	}
 
-	possibleTopics, ok := (possibleTopicsAny).(map[string]struct{})
+	possibleTopics, ok := (possibleTopicsAny).([]string)
 	if !ok {
 		setAnswer(c, http.StatusInternalServerError, "topics conversion error")
 		return
 	}
 
-	topics, err := analyzer.analyze(possibleTopics, message.Text)
+	topicsInMessage, err := analyzer.analyze(possibleTopics, message.Text)
 
 	usersTopicInChannelAny, err := dataBase.get(message.Channel, "", UsersTopicsByChannel)
 	if err != nil {
@@ -200,9 +204,9 @@ func news(c *gin.Context) {
 
 	var sendMessageMap map[string]ReturnMessage
 
-	for user, userTopics := range usersTopicInChannel {
-		for topic, _ := range userTopics {
-			if slices.Contains(topics, topic) {
+	for user, userTopicsInChannel := range usersTopicInChannel {
+		for topic, _ := range userTopicsInChannel {
+			if slices.Contains(topicsInMessage, topic) {
 				_, ok = sendMessageMap[user]
 				if !ok {
 					sendMessageMap[user] = ReturnMessage{
@@ -220,6 +224,7 @@ func news(c *gin.Context) {
 						Channel: message.Channel,
 					}
 				}
+
 			}
 		}
 	}

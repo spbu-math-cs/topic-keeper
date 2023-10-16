@@ -3,7 +3,7 @@ package main
 import "strings"
 
 type BasicTextAnalyzer interface {
-	analyze(topics map[string]struct{}, message string) ([]string, error)
+	analyze(topics []string, message string) ([]string, error)
 	//contains(text string, keyword string) float64
 }
 
@@ -18,9 +18,9 @@ func (a *Analyzer) contains(text string, keyword string) float64 {
 	return 0.0
 }
 
-func (a *Analyzer) analyze(topics map[string]struct{}, message string) ([]string, error) {
+func (a *Analyzer) analyze(topics []string, message string) ([]string, error) {
 	var answer []string
-	for topic := range topics {
+	for _, topic := range topics {
 		if a.contains(message, topic) != 0.0 {
 			answer = append(answer, topic)
 		}

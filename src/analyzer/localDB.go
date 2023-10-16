@@ -107,29 +107,18 @@ func (c *ChannelTopicTime) remove(parameter1 string, parameter2 string, _ string
 	return unreachableCodeError
 }
 
-func (c *ChannelTopicTime) get(parameter1 string, parameter2 string, property Property) (any, error) {
+func (c *ChannelTopicTime) get(parameter1 string, _ string, property Property) (any, error) {
 	c.mut.Lock()
 	c.mut.Unlock()
 
 	switch property {
-	case Time:
-		channel, topic := parameter1, parameter2
-
+	case Topics:
+		channel := parameter1
 		_, ok := c.topicTimes[channel]
 		if !ok {
 			delete(c.topicTimes, channel)
 			return nil, invalidChannelError
 		}
-
-		_, ok = c.topicTimes[channel][topic]
-		if !ok {
-			delete(c.topicTimes[channel], topic)
-			return nil, invalidTopicError
-		}
-
-		return c.topicTimes[channel][topic], nil
-	case Topics:
-		channel := parameter1
 		var m []string
 
 		for topic, last := range c.topicTimes[channel] {
@@ -264,14 +253,14 @@ func (c *ChannelTopicCount) get(parameter1 string, parameter2 string, property P
 		delete(c.topicCounts, channel)
 		return nil, invalidChannelError
 	}
-	_, ok = c.topicCounts[channel][topic]
-	if !ok {
-		delete(c.topicCounts[channel], topic)
-		return nil, invalidTopicError
-	}
 
 	switch property {
 	case Count:
+		_, ok = c.topicCounts[channel][topic]
+		if !ok {
+			delete(c.topicCounts[channel], topic)
+			return nil, invalidTopicError
+		}
 		return c.topicCounts[channel][topic], nil
 	case Topics:
 		return c.topicCounts[channel], nil
@@ -315,6 +304,7 @@ func (u *UsersChannelsTopics) add(parameter1 string, parameter2 string, paramete
 		m2 := make(map[string]struct{})
 		m2[topic] = struct{}{}
 		u.channelTopics[user][channel] = m2
+		return nil
 	}
 	_, ok = u.channelTopics[user][channel][topic]
 	u.channelTopics[user][channel][topic] = struct{}{}
