@@ -45,3 +45,38 @@ func TestDoesntContainKeyWord(t *testing.T) {
 		}
 	}
 }
+
+func TestAnalyze(t *testing.T) {
+	var analyzerTest Analyzer
+	for _, tc := range []struct {
+		input    []string
+		message  string
+		expected []string
+	}{
+		{
+			[]string{"x", "xa", "y"},
+			"x",
+			[]string{"x"},
+		},
+
+		{
+			[]string{"x", "xa", "y", "ax"},
+			"xaxaxaxa",
+			[]string{"x", "xa", "ax"},
+		},
+
+		{
+			[]string{"1", "2", "3", "fdkfdsk"},
+			"xaxaxaxa",
+			[]string{},
+		},
+	} {
+		res, err := analyzerTest.analyze(tc.input, tc.message)
+		if err != nil {
+			t.Errorf("Wrong analyzed %s", tc.message)
+		}
+		if len(res) != len(tc.expected) {
+			t.Errorf("Wrong analyzed %s", tc.message)
+		}
+	}
+}
