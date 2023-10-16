@@ -15,9 +15,6 @@ type ChannelData struct {
 	Topic   string `json:"topic"`
 }
 
-//echo $TOPIC_KEEPER_TOKEN
-//export TOPIC_KEEPER_TOKEN="6638697091:AAHhpaS-rXlgWXHQzlfa3tAGUoRctKp8n2Q"
-
 func main() {
 	token := os.Getenv("TOPIC_KEEPER_TOKEN")
 	bot, err := tgbotapi.NewBotAPI(token)
@@ -39,6 +36,7 @@ func main() {
 			tgbotapi.NewKeyboardButton("/view"),
 			tgbotapi.NewKeyboardButton("/add"),
 			tgbotapi.NewKeyboardButton("/remove"),
+			tgbotapi.NewKeyboardButton("/help"),
 		),
 	)
 
@@ -54,6 +52,8 @@ func main() {
 			handleStart(bot, update.Message.Chat.ID)
 		case "/view":
 			handleView(bot, update.Message.Chat.ID)
+		case "/help":
+			handleHelp(bot, update.Message.Chat.ID)
 		default:
 			if strings.HasPrefix(update.Message.Text, "/remove") || strings.HasPrefix(update.Message.Text, "/add") {
 				handleRemoveAdd(bot, update.Message.Chat.ID, update.Message.Text)
@@ -73,8 +73,9 @@ func sendMessage(bot *tgbotapi.BotAPI, chatID int64, text string) {
 }
 
 func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
-	reply := "Привет! Это ботик для обработки команд /start, /view, /add и /remove."
+	reply := "Привет! Бот предназначен для помощи в быстром и эффективном поиске нужной информации в чатах и темах на основе предоставленного списка."
 	sendMessage(bot, chatID, reply)
+	handleHelp(bot, chatID)
 }
 
 func handleView(bot *tgbotapi.BotAPI, chatID int64) {
@@ -105,11 +106,24 @@ func handleRemoveAdd(bot *tgbotapi.BotAPI, chatID int64, text string) {
 }
 
 func handleUnknownCommand(bot *tgbotapi.BotAPI, chatID int64) {
-	reply := "Я не понимаю вашей команды. Воспользуйтесь \n /start \n /view \n /remove <name> <topic> \n /add <name> <topic>"
+	reply := "Я не понимаю вашей команды. Воспользуйтесь \n /start \n /view \n /remove <@channelName> <topic> \n /add <@channelName> <topic>\n /help"
 	sendMessage(bot, chatID, reply)
 }
 
 func sendJSONToBackend(jsonData []byte, endpoint string) error {
 	//отправка json
 	return nil
+}
+
+func handleHelp(bot *tgbotapi.BotAPI, chatID int64) {
+	reply := "\n Мой набор команд включает в себя следующие опции:" + "\n" +
+
+		"/view - для просмотра доступных каналов и связанных с ними тем. \n \n" +
+
+		"/remove <@название канала> <слово> - удаляет указанное слово из списка для поиска в конкретном канале.\n \n " +
+
+		"/add <@название канала> <слово> - добавляет указанное слово в список для поиска в конкретном канале. \n \n " +
+
+		"Эти команды помогут вам управлять списком тем и слов для поиска, чтобы быстро находить нужную информацию в чатах."
+	sendMessage(bot, chatID, reply)
 }
