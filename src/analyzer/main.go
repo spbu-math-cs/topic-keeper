@@ -30,6 +30,15 @@ type ReturnMessage struct {
 	Summary string `json:"summary"`
 }
 
+type User struct {
+	User string `json:"user"`
+}
+
+type ChannelTopic struct {
+	Channel string `json:"channel"`
+	Topic   string `json:"topic"`
+}
+
 var (
 	topicTimes SafeStorage
 	topicCount SafeStorage
@@ -56,13 +65,15 @@ func main() {
 
 	router := gin.Default()
 
-	router.GET("/add", add)
-	router.GET("/remove", remove)
+	router.POST("/add", add)
+	router.POST("/remove", remove)
 	router.POST("/news", news)
+	router.POST("/view", view)
 
 	router.OPTIONS("/add", auto200)
 	router.OPTIONS("/remove", auto200)
 	router.OPTIONS("/news", auto200)
+	router.OPTIONS("/view", auto200)
 
 	err := router.Run("0.0.0.0:8080")
 	if err != nil {
@@ -241,4 +252,62 @@ func news(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, string(data))
+}
+
+func view(c *gin.Context) {
+	fmt.Println(c.Request.Header)
+
+	body, err := ioutil.ReadAll(c.Request.Body)
+
+	if err != nil {
+		setAnswer(c, http.StatusInternalServerError, "body reading error")
+		return
+	}
+
+	var user User
+
+	err = json.Unmarshal(body, &user)
+
+	if err != nil {
+		setAnswer(c, http.StatusInternalServerError, "json parsing error")
+		return
+	}
+
+	var db []ChannelTopic
+
+	dataAny, err := dataBase.get(user.User, "", Channels)
+	if err != nil {
+		if errors.Is(err, invalidUserError) {
+			returnData, err := json.Marshal(db)
+			if err != nil {
+				setAnswer(c, http.StatusInternalServerError, "json making error")
+				return
+			}
+
+			c.JSON(http.StatusOK, string(returnData))
+			return
+		}
+		setAnswer(c, http.StatusInternalServerError, "data bse error")
+		return
+	}
+
+	data, ok := (dataAny).(map[string]map[string]struct{})
+	if !ok {
+		setAnswer(c, http.StatusInternalServerError, "conversion error")
+		return
+	}
+
+	for channel, topics := range data {
+		for topic, _ := range topics {
+			db = append(db, ChannelTopic{Channel: channel, Topic: topic})
+		}
+	}
+
+	returnData, err := json.Marshal(db)
+	if err != nil {
+		setAnswer(c, http.StatusInternalServerError, "json making error")
+		return
+	}
+
+	c.JSON(http.StatusOK, string(returnData))
 }
