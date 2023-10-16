@@ -390,7 +390,7 @@ func TestUsersChannelsTopicsGet(t *testing.T) {
 	}
 }
 
-func TestChannelTopicCount(t *testing.T) {
+func TestChannelTopicCountGet(t *testing.T) {
 	var users SafeStorage
 	users = &ChannelTopicCount{}
 	users.create()

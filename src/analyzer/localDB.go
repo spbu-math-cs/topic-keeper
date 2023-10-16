@@ -58,7 +58,7 @@ func (c *ChannelTopicTime) add(parameter1 string, parameter2 string, _ string, p
 		_, ok := c.topicTimes[channel]
 		if !ok {
 			m1 := make(map[string]time.Time)
-			m1[topic] = time.Now().Add(-24 * time.Hour)
+			m1[topic] = time.Now().Add(-c.interval * 2)
 			c.topicTimes[channel] = m1
 			return nil
 		}
