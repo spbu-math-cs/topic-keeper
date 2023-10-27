@@ -22,11 +22,22 @@ type ReturnMessage struct {
 	Summary string `json:"summary"`
 }
 
+type AnalyzerRequest struct {
+	Text   string   `json:"text"`
+	Topics []string `json:"topics"`
+}
+
+type ReturnAnalyzer struct {
+	Summary string   `json:"summary"`
+	Topics  []string `json:"topics"`
+}
+
 type API interface {
 	addTopic(username string, c Concern) error
 	removeTopic(username string, c Concern) error
 	viewTopics(username string) ([]Concern, error)
 	postMessage(chanName string, msg string) ([]ReturnMessage, error)
+	analyze(msg string, topics []string) ([]string, string, error)
 }
 
 type basicAPI struct{}
@@ -116,6 +127,34 @@ func (b basicAPI) postMessage(chanName string, msg string) ([]ReturnMessage, err
 		return nil, err
 	}
 	return repl, nil
+}
+
+func (b basicAPI) analyze(msg string, topics []string) ([]string, string, error) {
+
+	body := AnalyzerRequest{Topics: topics, Text: msg}
+	bodyAsBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, "", err
+	}
+	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/analyze", apiAddr),
+		bytes.NewReader(bodyAsBytes))
+	if err != nil {
+		return nil, "", err
+	}
+	client := http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf(resp.Status)
+	}
+	var res ReturnAnalyzer
+	respBody, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(respBody, &res); err != nil {
+		return nil, "", err
+	}
+	return res.Topics, res.Summary, nil
 }
 
 var _ API = (*basicAPI)(nil)

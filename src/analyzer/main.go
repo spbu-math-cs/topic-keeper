@@ -12,6 +12,16 @@ import (
 	_ "github.com/jackc/pgx/v4/stdlib"
 )
 
+type AnalyzerRequest struct {
+	Text   string   `json:"text"`
+	Topics []string `json:"topics"`
+}
+
+type AnalyzerReturn struct {
+	Summary string   `json:"summary"`
+	Topics  []string `json:"topics"`
+}
+
 type CommandMessage struct {
 	User    string `json:"user"`
 	Channel string `json:"channel"`
@@ -69,11 +79,13 @@ func main() {
 	router.POST("/remove", remove)
 	router.POST("/news", news)
 	router.POST("/view", view)
+	router.POST("/analyze", analyze)
 
 	router.OPTIONS("/add", auto200)
 	router.OPTIONS("/remove", auto200)
 	router.OPTIONS("/news", auto200)
 	router.OPTIONS("/view", auto200)
+	router.OPTIONS("/analyze", auto200)
 
 	err := router.Run("0.0.0.0:8080")
 	if err != nil {
@@ -292,4 +304,39 @@ func view(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, db)
+}
+
+func analyze(c *gin.Context) {
+	fmt.Println(c.Request.Header)
+
+	body, err := ioutil.ReadAll(c.Request.Body)
+
+	if err != nil {
+		setAnswer(c, http.StatusInternalServerError, "body reading error")
+		return
+	}
+
+	var request AnalyzerRequest
+
+	err = json.Unmarshal(body, &request)
+
+	if err != nil {
+		setAnswer(c, http.StatusInternalServerError, "json parsing error")
+		return
+	}
+
+	topics, err := analyzer.analyze(request.Topics, request.Text)
+	if err != nil {
+		setAnswer(c, http.StatusInternalServerError, "analyzer error")
+		return
+	}
+
+	summary, err := summarizer.summarize(request.Text)
+	if err != nil {
+		setAnswer(c, http.StatusInternalServerError, "summarizer error")
+		return
+	}
+
+	c.JSON(http.StatusOK, AnalyzerReturn{Topics: topics, Summary: summary})
+
 }

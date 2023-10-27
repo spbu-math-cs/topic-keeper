@@ -28,6 +28,9 @@ type LocalStorage interface {
 	containsChannel(channel string) (bool, error)
 	addDelayedMessages(messages []Message) error
 	getDelayedMessages(user string) ([]Message, error)
+	pauseUser(user string) error
+	unpauseUser(user string) error
+	isPaused(user string) (bool, error)
 }
 
 type Table struct {
@@ -38,6 +41,7 @@ type Table struct {
 type DataBase struct {
 	Channels        Table
 	DelayedMessages Table
+	PausedUsers     Table
 }
 
 func (d *DataBase) add(user, channel, topic string) error {
@@ -247,4 +251,52 @@ func (d *DataBase) getDelayedMessages(user string) ([]Message, error) {
 	}
 
 	return messages, nil
+}
+
+func (d *DataBase) isPaused(user string) (bool, error) {
+	row := d.Channels.Storage.QueryRow(
+		"SELECT COUNT(*) FROM $1 WHERE nickname = $2",
+		d.PausedUsers.Name,
+		user,
+	)
+	var count uint64
+	err := row.Scan(&count)
+	if err != nil {
+		return false, err
+	}
+
+	return count != 0, nil
+}
+
+func (d *DataBase) pauseUser(user string) error {
+	isPaused, err := d.isPaused(user)
+	if err != nil {
+		return err
+	}
+	if isPaused {
+		return nil
+	}
+	_, err = d.Channels.Storage.Exec(
+		"INSERT INTO $1 (nickname) VALUES ($2)",
+		d.Channels.Name,
+		user,
+	)
+	return err
+}
+
+func (d *DataBase) unpauseUser(user string) error {
+	isPaused, err := d.isPaused(user)
+	if err != nil {
+		return err
+	}
+	if !isPaused {
+		return nil
+	}
+	_, err = d.Channels.Storage.Exec(
+		"DELETE FROM $1 WHERE nickname = $2",
+		d.Channels.Name,
+		user,
+	)
+
+	return err
 }
