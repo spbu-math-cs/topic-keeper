@@ -73,24 +73,49 @@ func main() {
 	)
 
 	api = basicAPI{}
+	var dataBase LocalStorage = &DataBase{}
 	for update := range updates {
 		if update.ChannelPost != nil {
-			username := update.ChannelPost.Chat.UserName
+
+			channel := update.ChannelPost.Chat.UserName
 			msg := update.ChannelPost.Text
-			resp, err := api.postMessage(username, msg)
-			if err != nil {
-				log.Println(err.Error())
+
+			if found, err := dataBase.containsChannel(channel); !found || err != nil {
+				if err != nil {
+					log.Printf(err.Error())
+				}
 				continue
 			}
 
-			for _, e := range resp {
-				ans := fmt.Sprintf(format, e.Topic, e.Channel, e.Summary, e.Channel,
+			possibleTopics, err := dataBase.getTopics(channel)
+			if err != nil {
+				log.Printf(err.Error())
+				continue
+			}
+
+			foundTopics, summary, err := api.analyze(msg, possibleTopics)
+			if err != nil {
+				log.Printf(err.Error())
+				continue
+			}
+
+			sendUsers, err := dataBase.getUsers(channel, foundTopics)
+			for user, userTopics := range sendUsers {
+				for _, topic := range userTopics {
+					if err := dataBase.setTime(user, channel, topic); err != nil {
+						log.Printf(err.Error())
+						continue
+					}
+				}
+				finalTopics := strings.Join(userTopics, ", ")
+				ans := fmt.Sprintf(format, finalTopics, channel, summary, channel,
 					update.ChannelPost.MessageID)
 
-				sendMessage(e.User, ans)
-
+				sendMessage(user, ans)
 			}
+
 			continue
+
 		}
 		if update.Message == nil {
 			continue
