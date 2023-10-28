@@ -1,8 +1,10 @@
 package main
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"log"
 	"os"
 	"strings"
@@ -12,10 +14,13 @@ import (
 
 var wrongFmtError = errors.New("Неправильный формат команды")
 
+//go:embed db_config.yml
+var rawDBConfig []byte
+
 var (
 	api      API
 	bot      *tgbotapi.BotAPI
-	dataBase LocalStorage = &DataBase{}
+	dataBase LocalStorage
 )
 
 func parseTopic(s string) (Concern, error) {
@@ -44,9 +49,18 @@ link: https://t.me/%s/%d
 `
 
 func main() {
+	var dbConfig DBConfig
+	var err error
+	if err := yaml.Unmarshal(rawDBConfig, &dbConfig); err != nil {
+		panic(err)
+	}
+	dataBase, err = NewDatabase(dbConfig)
+	if err != nil {
+		panic(err)
+	}
+
 	token := os.Getenv("TOPIC_KEEPER_TOKEN")
 
-	var err error
 	bot, err = tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Fatal(err.Error())
