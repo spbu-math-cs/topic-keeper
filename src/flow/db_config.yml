@@ -1,0 +1,5 @@
+host: localhost
+port: 5433
+user: pguser
+password: secret
+db: mydb

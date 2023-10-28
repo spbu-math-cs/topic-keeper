@@ -2,7 +2,11 @@ package main
 
 import (
 	"database/sql"
+	_ "embed"
+	"fmt"
 	"time"
+
+	_ "github.com/jackc/pgx/v4/stdlib"
 )
 
 const (
@@ -35,25 +39,38 @@ type LocalStorage interface {
 	getID(user string) (int64, error)
 }
 
-type Table struct {
-	Storage *sql.DB
-	Name    string
+type DataBase struct {
+	*sql.DB
 }
 
-type DataBase struct {
-	Channels        Table
-	DelayedMessages Table
-	Users           Table
+type DBConfig struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+	DB       string
+}
+
+//go:embed migrations/init.sql
+var initScript string
+
+func NewDatabase(cfg DBConfig) (*DataBase, error) {
+	url := fmt.Sprintf("postgres://%s:%s@%s:%s/%s", cfg.User, cfg.Password, cfg.Host, cfg.Port,
+		cfg.DB)
+	db, err := sql.Open("pgx", url)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(initScript); err != nil {
+		return nil, err
+	}
+	return &DataBase{db}, nil
 }
 
 func (d *DataBase) add(user, channel, topic string) error {
-	row := d.Channels.Storage.QueryRow(
-		"SELECT COUNT(*) FROM $1 WHERE nickname=$2 AND channel=$3 AND topic=$4",
-		d.Channels.Name,
-		user,
-		channel,
-		topic,
-	)
+	row := d.QueryRow("SELECT COUNT(*) FROM channels WHERE nickname=$1 AND channel=$2 AND topic=$3",
+		user, channel, topic)
+
 	var count int64
 	err := row.Scan(&count)
 	if err != nil {
@@ -64,9 +81,8 @@ func (d *DataBase) add(user, channel, topic string) error {
 		return nil
 	}
 
-	_, err = d.Channels.Storage.Exec(
-		"INSERT INTO $1 (nickname, channel, topic, last_time) VALUES ($2,$3,$4,$5)",
-		d.Channels.Name,
+	_, err = d.Exec(
+		"INSERT INTO channels (nickname, channel, topic, last_time) VALUES ($1,$2,$3,$4)",
 		user,
 		channel,
 		topic,
@@ -77,9 +93,8 @@ func (d *DataBase) add(user, channel, topic string) error {
 }
 
 func (d *DataBase) removeTopic(user, channel, topic string) error {
-	_, err := d.Channels.Storage.Exec(
-		"DELETE FROM $1 WHERE nickname = $2 AND channel = $3 AND topic $4",
-		d.Channels.Name,
+	_, err := d.Exec(
+		"DELETE FROM channels WHERE nickname = $1 AND channel = $2 AND topic = $3",
 		user,
 		channel,
 		topic,
@@ -91,9 +106,8 @@ func (d *DataBase) removeTopic(user, channel, topic string) error {
 }
 
 func (d *DataBase) removeChannel(user, channel string) error {
-	_, err := d.Channels.Storage.Exec(
-		"DELETE FROM $1 WHERE nickname = $2 AND channel = $3",
-		d.Channels.Name,
+	_, err := d.Exec(
+		"DELETE FROM channels WHERE nickname = $1 AND channel = $2",
 		user,
 		channel,
 	)
@@ -104,9 +118,8 @@ func (d *DataBase) removeChannel(user, channel string) error {
 }
 
 func (d *DataBase) getTopics(channel string) ([]string, error) {
-	rows, err := d.Channels.Storage.Query(
-		"SELECT topic FROM $1 WHERE channel = $2;",
-		d.Channels.Name,
+	rows, err := d.Query(
+		"SELECT topic FROM channels WHERE channel = $1;",
 		channel,
 	)
 	if err != nil {
@@ -125,9 +138,8 @@ func (d *DataBase) getTopics(channel string) ([]string, error) {
 }
 
 func (d *DataBase) getUserInfo(user string) (map[string][]string, error) {
-	rows, err := d.DelayedMessages.Storage.Query(
-		"SELECT channel, topic FROM $1 WHERE nickname = $2",
-		d.Channels.Name,
+	rows, err := d.Query(
+		"SELECT channel, topic FROM channels WHERE nickname = $1",
 		user,
 	)
 	if err != nil {
@@ -151,9 +163,8 @@ func (d *DataBase) getUserInfo(user string) (map[string][]string, error) {
 func (d *DataBase) getUsers(channel string, topics []string) (map[string][]string, error) {
 	answer := make(map[string][]string)
 	for _, topic := range topics {
-		rows, err := d.Channels.Storage.Query(
-			"SELECT nickname FROM $1 WHERE channel = $2 AND topic = $3 AND last_time < $4 ",
-			d.Channels.Name,
+		rows, err := d.Query(
+			"SELECT nickname FROM channels WHERE channel = $1 AND topic = $2 AND last_time < $3 ",
 			channel,
 			topic,
 			time.Now().Add(-Delay),
@@ -176,9 +187,8 @@ func (d *DataBase) getUsers(channel string, topics []string) (map[string][]strin
 }
 
 func (d *DataBase) setTime(user, channel, topic string) error {
-	_, err := d.Channels.Storage.Exec(
-		"UPDATE $1 SET time = $2 WHERE  nickname = $3 AND channel = $4 AND topic = $5",
-		d.Channels.Name,
+	_, err := d.Exec(
+		"UPDATE channels SET time = $1 WHERE  nickname = $2 AND channel = $3 AND topic = $4",
 		time.Now(),
 		user,
 		channel,
@@ -188,9 +198,8 @@ func (d *DataBase) setTime(user, channel, topic string) error {
 }
 
 func (d *DataBase) containsChannel(channel string) (bool, error) {
-	row := d.Channels.Storage.QueryRow(
-		"SELECT COUNT(*) FROM $1 WHERE channel=$2",
-		d.Channels.Name,
+	row := d.QueryRow(
+		"SELECT COUNT(*) FROM channels WHERE channel=$1",
 		channel,
 	)
 	var count int64
@@ -204,9 +213,9 @@ func (d *DataBase) containsChannel(channel string) (bool, error) {
 
 func (d *DataBase) addDelayedMessages(messages []Message) error {
 	for _, message := range messages {
-		_, err := d.Channels.Storage.Exec(
-			"INSERT INTO $1 (nickname, link, channel, topic, summary) VALUES ($2,$3,$4,$5,$6)",
-			d.DelayedMessages.Name,
+		_, err := d.Exec(
+			"INSERT INTO messages (nickname, link, channel, topic, summary) VALUES ($1,$2,$3,$4,"+
+				"$5)",
 			message.User,
 			message.Link,
 			message.Channel,
@@ -222,9 +231,8 @@ func (d *DataBase) addDelayedMessages(messages []Message) error {
 
 func (d *DataBase) getDelayedMessages(user string) ([]Message, error) {
 
-	rows, err := d.DelayedMessages.Storage.Query(
-		"SELECT * FROM $1 WHERE nickname = $2",
-		d.DelayedMessages.Name,
+	rows, err := d.Query(
+		"SELECT * FROM messages WHERE nickname = $1",
 		user,
 	)
 	if err != nil {
@@ -240,9 +248,8 @@ func (d *DataBase) getDelayedMessages(user string) ([]Message, error) {
 		messages = append(messages, message)
 	}
 
-	_, err = d.Channels.Storage.Exec(
-		"DELETE FROM $1 WHERE nickname = $2",
-		d.Channels.Name,
+	_, err = d.Exec(
+		"DELETE FROM channels WHERE nickname = $1",
 		user,
 	)
 	if err != nil {
@@ -253,9 +260,8 @@ func (d *DataBase) getDelayedMessages(user string) ([]Message, error) {
 }
 
 func (d *DataBase) isPaused(user string) (bool, error) {
-	row := d.Users.Storage.QueryRow(
-		"SELECT paused FROM $1 WHERE nickname = $2",
-		d.Users.Name,
+	row := d.QueryRow(
+		"SELECT paused FROM users WHERE nickname = $1",
 		user,
 	)
 	var isPaused bool
@@ -275,9 +281,8 @@ func (d *DataBase) pauseUser(user string) error {
 	if isPaused {
 		return nil
 	}
-	_, err = d.Users.Storage.Exec(
-		"UPDATE $1 SET pause = $2 WHERE  nickname = $3 ",
-		d.Users.Name,
+	_, err = d.Exec(
+		"UPDATE users SET pause = $1 WHERE nickname = $2 ",
 		true,
 		user,
 	)
@@ -295,9 +300,8 @@ func (d *DataBase) unpauseUser(user string) error {
 	if isPaused {
 		return nil
 	}
-	_, err = d.Users.Storage.Exec(
-		"UPDATE $1 SET pause = $2 WHERE  nickname = $3 ",
-		d.Users.Name,
+	_, err = d.Exec(
+		"UPDATE users SET pause = $1 WHERE  nickname = $2 ",
 		false,
 		user,
 	)
@@ -305,9 +309,8 @@ func (d *DataBase) unpauseUser(user string) error {
 }
 
 func (d *DataBase) getID(user string) (int64, error) {
-	row := d.Users.Storage.QueryRow(
-		"SELECT id FROM $1 WHERE nickname=$2",
-		d.Users.Name,
+	row := d.QueryRow(
+		"SELECT id FROM users WHERE nickname=$1",
 		user,
 	)
 	var id int64
@@ -320,9 +323,8 @@ func (d *DataBase) getID(user string) (int64, error) {
 }
 
 func (d *DataBase) addUser(user string, id int64) error {
-	row := d.Users.Storage.QueryRow(
-		"SELECT COUNT(*) FROM $1 WHERE nickname=$2",
-		d.Channels.Name,
+	row := d.QueryRow(
+		"SELECT COUNT(*) FROM users WHERE nickname=$1",
 		user,
 	)
 	var count int64
@@ -330,9 +332,8 @@ func (d *DataBase) addUser(user string, id int64) error {
 		return err
 	}
 
-	_, err := d.Channels.Storage.Exec(
-		"INSERT INTO $1 (id, nickname, paused) VALUES ($2,$3,$4)",
-		d.Users.Name,
+	_, err := d.Exec(
+		"INSERT INTO users (id, nickname, paused) VALUES ($1,$2,$3)",
 		id,
 		user,
 		false,
