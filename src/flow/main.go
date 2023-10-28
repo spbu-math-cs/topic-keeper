@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"gopkg.in/yaml.v2"
+	"hash/fnv"
 	"log"
 	"os"
 	"strings"
@@ -14,13 +15,30 @@ import (
 
 var wrongFmtError = errors.New("Неправильный формат команды")
 
+const (
+	NWorkers = 30
+	BaseCap  = 20
+)
+
 //go:embed db_config.yml
 var rawDBConfig []byte
+
+type workEvent struct {
+	channelName string
+	text        string
+	ID          int
+}
+
+type sendEvent struct {
+	text string
+	user string
+}
 
 var (
 	api      API
 	bot      *tgbotapi.BotAPI
 	dataBase LocalStorage
+	sendChan chan sendEvent
 )
 
 func parseTopic(s string) (Concern, error) {
@@ -48,7 +66,71 @@ Summary: %s
 link: https://t.me/%s/%d
 `
 
+func worker(workChan chan workEvent) {
+	for update := range workChan {
+		channel := update.channelName
+		msg := update.text
+
+		if found, err := dataBase.containsChannel(channel); !found || err != nil {
+			if err != nil {
+				log.Printf(err.Error())
+			}
+			continue
+		}
+
+		possibleTopics, err := dataBase.getTopics(channel)
+		if err != nil {
+			log.Printf(err.Error())
+			continue
+		}
+
+		foundTopics, summary, err := api.analyze(msg, possibleTopics)
+		if err != nil {
+			log.Printf(err.Error())
+			continue
+		}
+
+		sendUsers, err := dataBase.getUsers(channel, foundTopics)
+		for user, userTopics := range sendUsers {
+			for _, topic := range userTopics {
+				if err := dataBase.setTime(user, channel, topic); err != nil {
+					log.Printf(err.Error())
+					continue
+				}
+			}
+			finalTopics := strings.Join(userTopics, ", ")
+			ans := fmt.Sprintf(format, finalTopics, channel, summary, channel, update.ID)
+
+			sendChan <- sendEvent{
+				text: ans,
+				user: user,
+			}
+		}
+	}
+}
+
+func sender() {
+	for msg := range sendChan {
+		sendMessage(msg.user, msg.text)
+	}
+}
+
+func getHash(s string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return h.Sum32()
+}
+
 func main() {
+	workChans := make([]chan workEvent, NWorkers)
+	sendChan = make(chan sendEvent, BaseCap)
+
+	for i := 0; i < NWorkers; i++ {
+		workChans[i] = make(chan workEvent)
+		go worker(workChans[i])
+	}
+	go sender()
+
 	var dbConfig DBConfig
 	var err error
 	if err := yaml.Unmarshal(rawDBConfig, &dbConfig); err != nil {
@@ -86,76 +168,40 @@ func main() {
 
 	api = basicAPI{}
 	for update := range updates {
-		if update.ChannelPost != nil {
-
-			channel := update.ChannelPost.Chat.UserName
-			msg := update.ChannelPost.Text
-
-			if found, err := dataBase.containsChannel(channel); !found || err != nil {
-				if err != nil {
-					log.Printf(err.Error())
-				}
-				continue
+		switch {
+		case update.ChannelPost != nil:
+			hsh := getHash(update.ChannelPost.Chat.UserName)
+			workChans[hsh%NWorkers] <- workEvent{
+				channelName: update.ChannelPost.Chat.UserName,
+				text:        update.ChannelPost.Text,
+				ID:          update.ChannelPost.MessageID,
 			}
+		case update.Message != nil:
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Выберите команду:")
+			msg.ReplyMarkup = keyboard
 
-			possibleTopics, err := dataBase.getTopics(channel)
+			updText := strings.Trim(update.Message.Text, "\n ")
+			uname := update.Message.Chat.UserName
+			err := dataBase.addUser(uname, update.Message.Chat.ID)
 			if err != nil {
-				log.Printf(err.Error())
 				continue
 			}
 
-			foundTopics, summary, err := api.analyze(msg, possibleTopics)
-			if err != nil {
-				log.Printf(err.Error())
-				continue
-			}
-
-			sendUsers, err := dataBase.getUsers(channel, foundTopics)
-			for user, userTopics := range sendUsers {
-				for _, topic := range userTopics {
-					if err := dataBase.setTime(user, channel, topic); err != nil {
-						log.Printf(err.Error())
-						continue
-					}
+			switch updText {
+			case "/start":
+				handleStart(uname)
+			case "/view":
+				handleView(uname)
+			case "/help":
+				handleHelp(uname)
+			default:
+				if strings.HasPrefix(updText, "/add") {
+					handleAdd(uname, updText)
+				} else if strings.HasPrefix(updText, "/remove") {
+					handleRemove(uname, updText)
+				} else {
+					handleUnknownCommand(uname)
 				}
-				finalTopics := strings.Join(userTopics, ", ")
-				ans := fmt.Sprintf(format, finalTopics, channel, summary, channel, update.ChannelPost.MessageID)
-
-				sendMessage(user, ans)
-			}
-
-			continue
-
-		}
-		if update.Message == nil {
-			continue
-		}
-
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Выберите команду:")
-		msg.ReplyMarkup = keyboard
-
-		updText := strings.Trim(update.Message.Text, "\n ")
-		uname := update.Message.Chat.UserName
-		//users[uname] = update.Message.Chat.ID
-		err := dataBase.addUser(uname, update.Message.Chat.ID)
-		if err != nil {
-			continue
-		}
-
-		switch updText {
-		case "/start":
-			handleStart(uname)
-		case "/view":
-			handleView(uname)
-		case "/help":
-			handleHelp(uname)
-		default:
-			if strings.HasPrefix(updText, "/add") {
-				handleAdd(uname, updText)
-			} else if strings.HasPrefix(updText, "/remove") {
-				handleRemove(uname, updText)
-			} else {
-				handleUnknownCommand(uname)
 			}
 		}
 	}
