@@ -13,8 +13,9 @@ import (
 var wrongFmtError = errors.New("Неправильный формат команды")
 
 var (
-	api API
-	bot *tgbotapi.BotAPI
+	api      API
+	bot      *tgbotapi.BotAPI
+	dataBase LocalStorage = &DataBase{}
 )
 
 func parseTopic(s string) (Concern, error) {
@@ -42,10 +43,7 @@ Summary: %s
 link: https://t.me/%s/%d
 `
 
-var users map[string]int64
-
 func main() {
-	users = map[string]int64{}
 	token := os.Getenv("TOPIC_KEEPER_TOKEN")
 
 	var err error
@@ -73,7 +71,6 @@ func main() {
 	)
 
 	api = basicAPI{}
-	var dataBase LocalStorage = &DataBase{}
 	for update := range updates {
 		if update.ChannelPost != nil {
 
@@ -108,8 +105,7 @@ func main() {
 					}
 				}
 				finalTopics := strings.Join(userTopics, ", ")
-				ans := fmt.Sprintf(format, finalTopics, channel, summary, channel,
-					update.ChannelPost.MessageID)
+				ans := fmt.Sprintf(format, finalTopics, channel, summary, channel, update.ChannelPost.MessageID)
 
 				sendMessage(user, ans)
 			}
@@ -126,7 +122,11 @@ func main() {
 
 		updText := strings.Trim(update.Message.Text, "\n ")
 		uname := update.Message.Chat.UserName
-		users[uname] = update.Message.Chat.ID
+		//users[uname] = update.Message.Chat.ID
+		err := dataBase.addUser(uname, update.Message.Chat.ID)
+		if err != nil {
+			continue
+		}
 
 		switch updText {
 		case "/start":
@@ -148,12 +148,12 @@ func main() {
 }
 
 func sendMessage(username string, text string) {
-	userId, ok := users[username]
-	if !ok {
-		panic("!ok")
+	userId, err := dataBase.getID(username)
+	if err != nil {
+		panic(err.Error())
 	}
 	msg := tgbotapi.NewMessage(userId, text)
-	_, err := bot.Send(msg)
+	_, err = bot.Send(msg)
 	if err != nil {
 		log.Println(err.Error())
 	}
@@ -175,14 +175,10 @@ func handleHelp(username string) {
 }
 
 func handleView(username string) {
-	resp, err := api.viewTopics(username)
+	topicByChan, err := dataBase.getUserInfo(username)
 	if err != nil {
 		sendMessage(username, err.Error())
 		return
-	}
-	topicByChan := map[string][]string{}
-	for _, c := range resp {
-		topicByChan[c.Channel] = append(topicByChan[c.Channel], c.Topic)
 	}
 	str := strings.Builder{}
 	for ch, topics := range topicByChan {
@@ -197,13 +193,13 @@ func handleView(username string) {
 
 func handleAdd(username string, msg string) {
 	after, _ := strings.CutPrefix(msg, "/add")
-	topic, err := parseTopic(after)
-	fmt.Println(topic)
+	concern, err := parseTopic(after)
+	fmt.Println(concern)
 	if err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
-	if err := api.addTopic(username, topic); err != nil {
+	if err := dataBase.add(username, concern.Channel, concern.Topic); err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
@@ -212,13 +208,13 @@ func handleAdd(username string, msg string) {
 
 func handleRemove(username, msg string) {
 	after, _ := strings.CutPrefix(msg, "/remove")
-	topic, err := parseTopic(after)
-	fmt.Println(topic)
+	concern, err := parseTopic(after)
+	fmt.Println(concern)
 	if err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
-	if err := api.removeTopic(username, topic); err != nil {
+	if err := dataBase.removeTopic(username, concern.Channel, concern.Topic); err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
