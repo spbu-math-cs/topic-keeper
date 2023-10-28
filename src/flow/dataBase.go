@@ -208,7 +208,7 @@ func (d *DataBase) containsChannel(channel string) (bool, error) {
 		return false, err
 	}
 
-	return count == 0, nil
+	return count != 0, nil
 }
 
 func (d *DataBase) addDelayedMessages(messages []Message) error {
