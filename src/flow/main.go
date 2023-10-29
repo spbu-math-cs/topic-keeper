@@ -164,9 +164,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+
 	if openAIkey != "" {
 		log.Printf("using openAI summarizer with key: %s", openAIkey)
 	}
+	setBotCommands(bot)
 
 	bot.Debug = true
 	log.Printf("Authorized on account: %s\n", bot.Self.UserName)
@@ -302,6 +304,7 @@ func handleRemove(username, msg string) {
 }
 
 func handleUnknownCommand(username string) {
+
 	reply := "Я не понимаю вашей команды. Воспользуйтесь \n /start \n /view \n /remove <name> <topic> \n /add <name> <topic>"
 	sendMessage(username, reply)
 }
@@ -315,4 +318,31 @@ func summarize(text string) string {
 	}
 
 	return string(testRunes[:length])
+}
+
+func setBotCommands(bot *tgbotapi.BotAPI) {
+	commands := []tgbotapi.BotCommand{
+		{
+			Command:     "start",
+			Description: "Начать работу с ботом",
+		},
+		{
+			Command:     "view",
+			Description: "Просмотреть доступные каналы и темы",
+		},
+		{
+			Command:     "add",
+			Description: "Добавить слово в список для поиска",
+		},
+		{
+			Command:     "remove",
+			Description: "Удалить слово из списка для поиска",
+		},
+		{
+			Command:     "help",
+			Description: "Получить помощь",
+		},
+	}
+	config := tgbotapi.NewSetMyCommands(commands...)
+	bot.Request(config)
 }
