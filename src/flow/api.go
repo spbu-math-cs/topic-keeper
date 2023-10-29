@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 )
 
@@ -27,9 +28,20 @@ type AnalyzerRequest struct {
 	Topics []string `json:"topics"`
 }
 
-type ReturnAnalyzer struct {
+type AnalyzerReturn struct {
 	Summary string   `json:"summary"`
 	Topics  []string `json:"topics"`
+}
+
+type OpenAIAnswer struct {
+	Choices []struct {
+		Message struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
+		Index        int    `json:"index"`
+	} `json:"choices"`
 }
 
 type API interface {
@@ -37,7 +49,8 @@ type API interface {
 	removeTopic(username string, c Concern) error
 	viewTopics(username string) ([]Concern, error)
 	postMessage(chanName string, msg string) ([]ReturnMessage, error)
-	analyze(msg string, topics []string) ([]string, string, error)
+	analyze(msg string, topics []string) ([]string, error)
+	summarize(text string) (string, error)
 }
 
 type basicAPI struct{}
@@ -129,32 +142,76 @@ func (b basicAPI) postMessage(chanName string, msg string) ([]ReturnMessage, err
 	return repl, nil
 }
 
-func (b basicAPI) analyze(msg string, topics []string) ([]string, string, error) {
+func (b basicAPI) analyze(msg string, topics []string) ([]string, error) {
 
 	body := AnalyzerRequest{Topics: topics, Text: msg}
 	bodyAsBytes, err := json.Marshal(body)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/analyze", apiAddr),
 		bytes.NewReader(bodyAsBytes))
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	client := http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf(resp.Status)
+		return nil, fmt.Errorf(resp.Status)
 	}
-	var res ReturnAnalyzer
+	var res AnalyzerReturn
 	respBody, _ := io.ReadAll(resp.Body)
 	if err := json.Unmarshal(respBody, &res); err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return res.Topics, res.Summary, nil
+	return res.Topics, nil
+}
+
+func (b basicAPI) summarize(text string) (string, error) {
+	///TODO() вставить ключ перед демо
+	apiKey := ""
+	url := "https://api.openai.com/v1/chat/completions"
+
+	requestBody := map[string]interface{}{
+		"model": "gpt-3.5-turbo",
+		"messages": []map[string]string{
+			{"role": "user", "content": "Сократи объем сообщения до 1 предложения не меняя его суть" +
+				"Вот текст : \n" + `"` + text + `"`},
+		},
+		"temperature": 0.5,
+	}
+
+	requestBodyJSON, _ := json.Marshal(requestBody)
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBodyJSON))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return text, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	var response OpenAIAnswer
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return text, err
+	}
+
+	choices := response.Choices
+	if len(choices) == 0 {
+		return text, nil
+	}
+	summary := choices[0].Message.Content
+
+	fmt.Print(text + "\n")
+	return summary, nil
 }
 
 var _ API = (*basicAPI)(nil)
