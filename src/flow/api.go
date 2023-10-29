@@ -49,7 +49,7 @@ type API interface {
 	viewTopics(username string) ([]Concern, error)
 	postMessage(chanName string, msg string) ([]ReturnMessage, error)
 	analyze(msg string, topics []string) ([]string, error)
-	summarize(text string) (string, error)
+	summarize(text, apiKey string) (string, error)
 }
 
 type basicAPI struct{}
@@ -169,9 +169,8 @@ func (b basicAPI) analyze(msg string, topics []string) ([]string, error) {
 	return res.Topics, nil
 }
 
-func (b basicAPI) summarize(text string) (string, error) {
-	///TODO() вставить ключ перед демо
-	apiKey := ""
+func (b basicAPI) summarize(text, apiKey string) (string, error) {
+
 	url := "https://api.openai.com/v1/chat/completions"
 
 	requestBody := map[string]interface{}{

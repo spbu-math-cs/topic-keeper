@@ -36,10 +36,11 @@ type sendEvent struct {
 }
 
 var (
-	api      API
-	bot      *tgbotapi.BotAPI
-	dataBase LocalStorage
-	sendChan chan sendEvent
+	api       API
+	bot       *tgbotapi.BotAPI
+	dataBase  LocalStorage
+	sendChan  chan sendEvent
+	openAIkey string
 )
 
 func parseTopic(s string) (Concern, error) {
@@ -60,6 +61,9 @@ func parseTopic(s string) (Concern, error) {
 
 //echo $TOPIC_KEEPER_TOKEN
 //export TOPIC_KEEPER_TOKEN="6638697091:AAHhpaS-rXlgWXHQzlfa3tAGUoRctKp8n2Q"
+
+//echo $TOPIC_KEEPER_OPENAI_TOKEN
+//export TOPIC_KEEPER_OPENAI_TOKEN=""
 
 const format = `Topic was detected: [%s]
 In channel: @%s
@@ -92,13 +96,13 @@ func worker(workChan chan workEvent) {
 		}
 
 		var summary string
-		if len(msg) > summaryLength {
-			if summary, err = api.summarize(msg); err != nil {
-				log.Printf(err.Error())
-				continue
+		if openAIkey != "" && len(msg) > summaryLength {
+			if summary, err = api.summarize(msg, openAIkey); err != nil {
+				log.Printf("error in OpenAI uisng with error: %s \n", err.Error())
+				summary = summarize(msg)
 			}
 		} else {
-			summary = msg
+			summary = summarize(msg)
 		}
 
 		sendUsers, err := dataBase.getUsers(channel, foundTopics)
@@ -153,10 +157,14 @@ func main() {
 	}
 
 	token := os.Getenv("TOPIC_KEEPER_TOKEN")
+	openAIkey = os.Getenv("TOPIC_KEEPER_OPENAI_TOKEN")
 
 	bot, err = tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Fatal(err.Error())
+	}
+	if openAIkey != "" {
+		log.Printf("using openAI summarizer with key: %s", openAIkey)
 	}
 
 	bot.Debug = true
@@ -297,7 +305,7 @@ func handleUnknownCommand(username string) {
 	sendMessage(username, reply)
 }
 
-func summarize(text string) (string, error) {
+func summarize(text string) string {
 	testRunes := []rune(text)
 
 	length := len(testRunes)
@@ -305,5 +313,5 @@ func summarize(text string) (string, error) {
 		length = summaryLength
 	}
 
-	return string(testRunes[:length]), nil
+	return string(testRunes[:length])
 }
