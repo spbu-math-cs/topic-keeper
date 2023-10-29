@@ -4,11 +4,12 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"hash/fnv"
 	"log"
 	"os"
 	"strings"
+
+	"gopkg.in/yaml.v2"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -166,7 +167,7 @@ func main() {
 	if openAIkey != "" {
 		log.Printf("using openAI summarizer with key: %s", openAIkey)
 	}
-
+	setBotCommands(bot)
 	bot.Debug = true
 	log.Printf("Authorized on account: %s\n", bot.Self.UserName)
 
@@ -314,4 +315,31 @@ func summarize(text string) string {
 	}
 
 	return string(testRunes[:length])
+}
+
+func setBotCommands(bot *tgbotapi.BotAPI) {
+	commands := []tgbotapi.BotCommand{
+		{
+			Command:     "start",
+			Description: "Начать работу с ботом",
+		},
+		{
+			Command:     "view",
+			Description: "Просмотреть доступные каналы и темы",
+		},
+		{
+			Command:     "add",
+			Description: "Добавить слово в список для поиска",
+		},
+		{
+			Command:     "remove",
+			Description: "Удалить слово из списка для поиска",
+		},
+		{
+			Command:     "help",
+			Description: "Получить помощь",
+		},
+	}
+	config := tgbotapi.NewSetMyCommands(commands...)
+	bot.Request(config)
 }
