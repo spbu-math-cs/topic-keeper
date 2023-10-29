@@ -84,8 +84,14 @@ func worker(workChan chan workEvent) {
 			continue
 		}
 
-		foundTopics, summary, err := api.analyze(msg, possibleTopics)
-		if err != nil {
+		var foundTopics []string
+		if foundTopics, err = api.analyze(msg, possibleTopics); err != nil {
+			log.Printf(err.Error())
+			continue
+		}
+
+		var summary string
+		if summary, err = api.summarize(msg); err != nil {
 			log.Printf(err.Error())
 			continue
 		}
