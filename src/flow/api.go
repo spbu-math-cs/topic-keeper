@@ -210,7 +210,6 @@ func (b basicAPI) summarize(text string) (string, error) {
 	}
 	summary := choices[0].Message.Content
 
-	fmt.Print(text + "\n")
 	return summary, nil
 }
 
