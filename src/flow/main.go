@@ -30,16 +30,11 @@ type workEvent struct {
 	ID          int
 }
 
-type sendEvent struct {
-	text string
-	user string
-}
-
 var (
 	api       API
 	bot       *tgbotapi.BotAPI
 	dataBase  LocalStorage
-	sendChan  chan sendEvent
+	sendChan  chan Message
 	openAIkey string
 )
 
@@ -107,26 +102,42 @@ func worker(workChan chan workEvent) {
 
 		sendUsers, err := dataBase.getUsers(channel, foundTopics)
 		for user, userTopics := range sendUsers {
+			isPaused, err := dataBase.isPaused(user)
+			if err != nil {
+				log.Printf(err.Error())
+				continue
+			}
 			for _, topic := range userTopics {
 				if err := dataBase.setTime(user, channel, topic); err != nil {
 					log.Printf(err.Error())
 					continue
 				}
 			}
-			finalTopics := strings.Join(userTopics, ", ")
-			ans := fmt.Sprintf(format, finalTopics, channel, summary, channel, update.ID)
 
-			sendChan <- sendEvent{
-				text: ans,
-				user: user,
+			finalTopics := strings.Join(userTopics, ", ")
+			message := Message{
+				User:    user,
+				Link:    update.ID,
+				Channel: channel,
+				Topic:   finalTopics,
+				Summary: summary,
 			}
+			if isPaused {
+				if err := dataBase.addDelayedMessage(message); err != nil {
+					log.Printf(err.Error())
+					continue
+				}
+			} else {
+				sendChan <- message
+			}
+
 		}
 	}
 }
 
 func sender() {
 	for msg := range sendChan {
-		sendMessage(msg.user, msg.text)
+		sendNews(msg)
 	}
 }
 
@@ -138,7 +149,7 @@ func getHash(s string) uint32 {
 
 func main() {
 	workChans := make([]chan workEvent, NWorkers)
-	sendChan = make(chan sendEvent, BaseCap)
+	sendChan = make(chan Message, BaseCap)
 
 	for i := 0; i < NWorkers; i++ {
 		workChans[i] = make(chan workEvent)
@@ -182,6 +193,8 @@ func main() {
 			tgbotapi.NewKeyboardButton("/add"),
 			tgbotapi.NewKeyboardButton("/remove"),
 			tgbotapi.NewKeyboardButton("/help"),
+			tgbotapi.NewKeyboardButton("/pause"),
+			tgbotapi.NewKeyboardButton("/unpause"),
 		),
 	)
 
@@ -213,6 +226,10 @@ func main() {
 				handleView(uname)
 			case "/help":
 				handleHelp(uname)
+			case "/pause":
+				handlePause(uname)
+			case "/unpause":
+				handleUnPause(uname)
 			default:
 				if strings.HasPrefix(updText, "/add") {
 					handleAdd(uname, updText)
@@ -233,6 +250,19 @@ func sendMessage(username string, text string) {
 	}
 	msg := tgbotapi.NewMessage(userId, text)
 	_, err = bot.Send(msg)
+	if err != nil {
+		log.Println(err.Error())
+	}
+}
+
+func sendNews(msg Message) {
+	userId, err := dataBase.getID(msg.User)
+	if err != nil {
+		panic(err.Error())
+	}
+	text := fmt.Sprintf(format, msg.Topic, msg.Channel, msg.Summary, msg.Channel, msg.Link)
+	ans := tgbotapi.NewMessage(userId, text)
+	_, err = bot.Send(ans)
 	if err != nil {
 		log.Println(err.Error())
 	}
@@ -303,6 +333,34 @@ func handleRemove(username, msg string) {
 func handleUnknownCommand(username string) {
 	reply := "Я не понимаю вашей команды. Воспользуйтесь \n /start \n /view \n /remove <name> <topic> \n /add <name> <topic>"
 	sendMessage(username, reply)
+}
+
+func handlePause(username string) {
+	if err := dataBase.pauseUser(username); err != nil {
+		sendMessage(username, err.Error())
+		return
+	}
+	sendMessage(username, "Обновления поставлены на паузу!")
+}
+
+func handleUnPause(username string) {
+	var err error
+	var messages []Message
+	if err = dataBase.unpauseUser(username); err != nil {
+		sendMessage(username, err.Error())
+		return
+	}
+
+	if messages, err = dataBase.getDelayedMessages(username); err != nil {
+		sendMessage(username, err.Error())
+		return
+	}
+
+	for _, msg := range messages {
+		sendNews(msg)
+	}
+
+	sendMessage(username, "Обновления сняты с паузы!")
 }
 
 func summarize(text string) string {
