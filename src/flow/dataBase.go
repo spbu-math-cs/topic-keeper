@@ -15,7 +15,7 @@ const (
 
 type Message struct {
 	User    string `json:"user"`
-	Link    string `json:"link"`
+	Link    int    `json:"link"`
 	Channel string `json:"channel"`
 	Topic   string `json:"topic"`
 	Summary string `json:"summary"`
@@ -31,7 +31,7 @@ type LocalStorage interface {
 	getUsers(channel string, topics []string) (map[string][]string, error)
 	setTime(user, channel, topic string) error
 	containsChannel(channel string) (bool, error)
-	addDelayedMessages(messages []Message) error
+	addDelayedMessage(messages Message) error
 	getDelayedMessages(user string) ([]Message, error)
 	pauseUser(user string) error
 	unpauseUser(user string) error
@@ -211,22 +211,18 @@ func (d *DataBase) containsChannel(channel string) (bool, error) {
 	return count != 0, nil
 }
 
-func (d *DataBase) addDelayedMessages(messages []Message) error {
-	for _, message := range messages {
-		_, err := d.Exec(
-			"INSERT INTO messages (nickname, link, channel, topic, summary) VALUES ($1,$2,$3,$4,"+
-				"$5)",
-			message.User,
-			message.Link,
-			message.Channel,
-			message.Topic,
-			message.Summary,
-		)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+func (d *DataBase) addDelayedMessage(message Message) error {
+	_, err := d.Exec(
+		"INSERT INTO messages (nickname, link, channel, topic, summary) VALUES ($1,$2,$3,$4,"+
+			"$5)",
+		message.User,
+		message.Link,
+		message.Channel,
+		message.Topic,
+		message.Summary,
+	)
+
+	return err
 }
 
 func (d *DataBase) getDelayedMessages(user string) ([]Message, error) {
