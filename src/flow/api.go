@@ -29,8 +29,7 @@ type AnalyzerRequest struct {
 }
 
 type AnalyzerReturn struct {
-	Summary string   `json:"summary"`
-	Topics  []string `json:"topics"`
+	Topics []string `json:"topics"`
 }
 
 type OpenAIAnswer struct {

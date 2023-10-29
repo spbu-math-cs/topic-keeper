@@ -15,13 +15,11 @@ type AnalyzerRequest struct {
 }
 
 type AnalyzerReturn struct {
-	Summary string   `json:"summary"`
-	Topics  []string `json:"topics"`
+	Topics []string `json:"topics"`
 }
 
 var (
-	analyzer   BasicTextAnalyzer
-	summarizer Summarizer
+	analyzer BasicTextAnalyzer
 )
 
 const (
@@ -30,7 +28,6 @@ const (
 
 func main() {
 	analyzer = &Analyzer{}
-	summarizer = &MessageSummarizer{textLength: summaryLength}
 
 	router := gin.Default()
 	router.POST("/analyze", analyze)
@@ -71,12 +68,6 @@ func analyze(c *gin.Context) {
 		return
 	}
 
-	summary, err := summarizer.summarize(request.Text)
-	if err != nil {
-		setAnswer(c, http.StatusInternalServerError, "summarizer error")
-		return
-	}
-
-	c.JSON(http.StatusOK, AnalyzerReturn{Topics: topics, Summary: summary})
+	c.JSON(http.StatusOK, AnalyzerReturn{Topics: topics})
 
 }
