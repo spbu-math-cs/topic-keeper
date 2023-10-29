@@ -16,8 +16,9 @@ import (
 var wrongFmtError = errors.New("Неправильный формат команды")
 
 const (
-	NWorkers = 30
-	BaseCap  = 20
+	NWorkers      = 30
+	BaseCap       = 20
+	summaryLength = 50
 )
 
 //go:embed db_config.yml
@@ -91,9 +92,13 @@ func worker(workChan chan workEvent) {
 		}
 
 		var summary string
-		if summary, err = api.summarize(msg); err != nil {
-			log.Printf(err.Error())
-			continue
+		if len(msg) > summaryLength {
+			if summary, err = api.summarize(msg); err != nil {
+				log.Printf(err.Error())
+				continue
+			}
+		} else {
+			summary = msg
 		}
 
 		sendUsers, err := dataBase.getUsers(channel, foundTopics)
@@ -290,4 +295,15 @@ func handleRemove(username, msg string) {
 func handleUnknownCommand(username string) {
 	reply := "Я не понимаю вашей команды. Воспользуйтесь \n /start \n /view \n /remove <name> <topic> \n /add <name> <topic>"
 	sendMessage(username, reply)
+}
+
+func summarize(text string) (string, error) {
+	testRunes := []rune(text)
+
+	length := len(testRunes)
+	if length > summaryLength {
+		length = summaryLength
+	}
+
+	return string(testRunes[:length]), nil
 }
