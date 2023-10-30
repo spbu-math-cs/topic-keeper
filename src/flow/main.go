@@ -300,7 +300,11 @@ func handleView(username string) {
 		}
 		str.WriteString("\n")
 	}
-	sendMessage(username, str.String())
+	ans := str.String()
+	if ans == "" {
+		ans = "Ничего не отслеживается"
+	}
+	sendMessage(username, ans)
 }
 
 func handleAdd(username string, msg string) {
