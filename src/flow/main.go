@@ -192,9 +192,10 @@ func main() {
 			tgbotapi.NewKeyboardButton("/view"),
 			tgbotapi.NewKeyboardButton("/add"),
 			tgbotapi.NewKeyboardButton("/remove"),
-			tgbotapi.NewKeyboardButton("/help"),
+			tgbotapi.NewKeyboardButton("/removeChannel"),
 			tgbotapi.NewKeyboardButton("/pause"),
 			tgbotapi.NewKeyboardButton("/unpause"),
+			tgbotapi.NewKeyboardButton("/help"),
 		),
 	)
 
@@ -235,6 +236,8 @@ func main() {
 					handleAdd(uname, updText)
 				} else if strings.HasPrefix(updText, "/remove") {
 					handleRemove(uname, updText)
+				} else if strings.HasPrefix(updText, "/removeChannel") {
+					handleRemoveChannel(uname, updText)
 				} else {
 					handleUnknownCommand(uname)
 				}
@@ -328,6 +331,21 @@ func handleRemove(username, msg string) {
 		return
 	}
 	sendMessage(username, "Топик удалён!")
+}
+
+func handleRemoveChannel(username, msg string) {
+	after, _ := strings.CutPrefix(msg, "/removeChannel")
+	concern, err := parseTopic(after)
+	fmt.Println(concern)
+	if err != nil {
+		sendMessage(username, err.Error())
+		return
+	}
+	if err := dataBase.removeChannel(username, concern.Channel); err != nil {
+		sendMessage(username, err.Error())
+		return
+	}
+	sendMessage(username, "Канал удалён!")
 }
 
 func handleUnknownCommand(username string) {
