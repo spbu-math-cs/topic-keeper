@@ -421,5 +421,8 @@ func setBotCommands(bot *tgbotapi.BotAPI) {
 		},
 	}
 	config := tgbotapi.NewSetMyCommands(commands...)
-	bot.Request(config)
+	_, err := bot.Request(config)
+	if err != nil {
+		log.Printf(err.Error())
+	}
 }
