@@ -4,13 +4,14 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"strconv"
 	"time"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
 )
 
 const (
-	Delay = time.Minute
+	Delay = 10 * time.Second
 )
 
 type Message struct {
@@ -188,7 +189,7 @@ func (d *DataBase) getUsers(channel string, topics []string) (map[string][]strin
 
 func (d *DataBase) setTime(user, channel, topic string) error {
 	_, err := d.Exec(
-		"UPDATE channels SET time = $1 WHERE  nickname = $2 AND channel = $3 AND topic = $4",
+		"UPDATE channels SET last_time = $1 WHERE  nickname = $2 AND channel = $3 AND topic = $4",
 		time.Now(),
 		user,
 		channel,
@@ -216,7 +217,7 @@ func (d *DataBase) addDelayedMessage(message Message) error {
 		"INSERT INTO messages (nickname, link, channel, topic, summary) VALUES ($1,$2,$3,$4,"+
 			"$5)",
 		message.User,
-		message.Link,
+		strconv.Itoa(message.Link),
 		message.Channel,
 		message.Topic,
 		message.Summary,
@@ -245,7 +246,7 @@ func (d *DataBase) getDelayedMessages(user string) ([]Message, error) {
 	}
 
 	_, err = d.Exec(
-		"DELETE FROM channels WHERE nickname = $1",
+		"DELETE FROM messages WHERE nickname = $1",
 		user,
 	)
 	if err != nil {
@@ -278,7 +279,7 @@ func (d *DataBase) pauseUser(user string) error {
 		return nil
 	}
 	_, err = d.Exec(
-		"UPDATE users SET pause = $1 WHERE nickname = $2 ",
+		"UPDATE users SET paused = $1 WHERE nickname = $2 ",
 		true,
 		user,
 	)
@@ -293,14 +294,12 @@ func (d *DataBase) unpauseUser(user string) error {
 	if !isPaused {
 		return nil
 	}
-	if isPaused {
-		return nil
-	}
 	_, err = d.Exec(
-		"UPDATE users SET pause = $1 WHERE  nickname = $2 ",
+		"UPDATE users SET paused = $1 WHERE  nickname = $2 ",
 		false,
 		user,
 	)
+	fmt.Println(user)
 	return err
 }
 
