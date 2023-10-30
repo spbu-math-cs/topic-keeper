@@ -92,7 +92,22 @@ func main() {
 			}
 			continue
 		}
-		if update.Message == nil {
+		if update.Message != nil {
+			username := update.Message.Chat.UserName
+			msg := update.Message.Text
+			resp, err := api.postMessage(username, msg)
+			if err != nil {
+				log.Println(err.Error())
+				continue
+			}
+
+			for _, e := range resp {
+				ans := fmt.Sprintf(format, e.Topic, e.Channel, e.Summary, e.Channel,
+					update.Message.MessageID)
+
+				sendMessage(e.User, ans)
+			}
+			//processUpdate(update, username, msg)
 			continue
 		}
 
@@ -121,6 +136,21 @@ func main() {
 		}
 	}
 }
+
+/*
+func processUpdate(update tgbotapi.Update, username string, msg string) {
+  resp, err := api.postMessage(username, msg)
+  if err != nil {
+    log.Println(err.Error())
+  }
+
+  for _, e := range resp {
+    ans := fmt.Sprintf(format, e.Topic, e.Channel, e.Summary, e.Channel,
+      update.Message.MessageID)
+
+    sendMessage(e.User, ans)
+  }
+}*/
 
 func sendMessage(username string, text string) {
 	userId, ok := users[username]
