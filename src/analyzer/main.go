@@ -22,10 +22,6 @@ var (
 	analyzer BasicTextAnalyzer
 )
 
-const (
-	summaryLength = 100
-)
-
 func main() {
 	analyzer = &Analyzer{}
 
