@@ -199,7 +199,6 @@ func main() {
 			tgbotapi.NewKeyboardButton("/help"),
 		),
 	)
-
 	api = basicAPI{}
 	for update := range updates {
 		switch {
@@ -211,6 +210,15 @@ func main() {
 				ID:          update.ChannelPost.MessageID,
 			}
 		case update.Message != nil:
+			if update.Message.Chat.IsSuperGroup() {
+				hsh := getHash(update.Message.Chat.UserName)
+				workChans[hsh%NWorkers] <- workEvent{
+					channelName: update.Message.Chat.UserName,
+					text:        update.Message.Text,
+					ID:          update.Message.MessageID,
+				}
+				continue
+			}
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Выберите команду:")
 			msg.ReplyMarkup = keyboard
 
