@@ -46,33 +46,26 @@ func parseTopic(s string) (Concern, error) {
 		return Concern{}, wrongFmtError
 	}
 	chanName = strings.Trim(chanName, "\n ")
-
-	channelConcern, err := parseChannelName(chanName)
+	channelName, err := parseChannelName(chanName)
 	if err != nil {
 		return Concern{}, err
 	}
 
 	return Concern{
-		Channel: channelConcern.Channel,
+		Channel: channelName,
 		Topic:   topicName,
 	}, nil
 }
 
-func parseChannelName(s string) (Concern, error) {
+func parseChannelName(s string) (string, error) {
 	chanName := strings.Trim(s, "\n ")
 	if strings.HasPrefix(chanName, "@") {
-		return Concern{
-			Channel: chanName[1:],
-			Topic:   "",
-		}, nil
+		return chanName[1:], nil
+	} else if strings.HasPrefix(chanName, "https://t.me/") {
+		return chanName[len("https://t.me/"):], nil
+	} else {
+		return "", wrongFmtError
 	}
-	if strings.HasPrefix(chanName, "https://t.me/") {
-		return Concern{
-			Channel: chanName[13:],
-			Topic:   "",
-		}, nil
-	}
-	return Concern{}, wrongFmtError
 }
 
 //echo $TOPIC_KEEPER_TOKEN
@@ -368,12 +361,12 @@ func handleRemove(username, msg string) {
 
 func handleRemoveChannel(username, msg string) {
 	channel, _ := strings.CutPrefix(msg, "/removeChannel")
-	concern, err := parseChannelName(channel)
-	if err != nil {
+	var err error
+	if channel, err = parseChannelName(channel); err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
-	if err := dataBase.removeChannel(username, concern.Channel); err != nil {
+	if err := dataBase.removeChannel(username, channel); err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
