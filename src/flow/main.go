@@ -55,6 +55,17 @@ func parseTopic(s string) (Concern, error) {
 	}, nil
 }
 
+func parseChannelName(s string) (Concern, error) {
+	chanName := strings.Trim(s, "\n ")
+	if !strings.HasPrefix(chanName, "@") {
+		return Concern{}, wrongFmtError
+	}
+	return Concern{
+		Channel: chanName[1:],
+		Topic:   "",
+	}, nil
+}
+
 //echo $TOPIC_KEEPER_TOKEN
 //export TOPIC_KEEPER_TOKEN="6638697091:AAHhpaS-rXlgWXHQzlfa3tAGUoRctKp8n2Q"
 
@@ -195,7 +206,7 @@ func main() {
 			tgbotapi.NewKeyboardButton("/remove"),
 			tgbotapi.NewKeyboardButton("/removeChannel"),
 			tgbotapi.NewKeyboardButton("/pause"),
-			tgbotapi.NewKeyboardButton("/unpause"),
+			tgbotapi.NewKeyboardButton("/continue"),
 			tgbotapi.NewKeyboardButton("/help"),
 		),
 	)
@@ -238,15 +249,15 @@ func main() {
 				handleHelp(uname)
 			case "/pause":
 				handlePause(uname)
-			case "/unpause":
-				handleUnPause(uname)
+			case "/continue":
+				handleContinue(uname)
 			default:
 				if strings.HasPrefix(updText, "/add") {
 					handleAdd(uname, updText)
-				} else if strings.HasPrefix(updText, "/remove") {
-					handleRemove(uname, updText)
 				} else if strings.HasPrefix(updText, "/removeChannel") {
 					handleRemoveChannel(uname, updText)
+				} else if strings.HasPrefix(updText, "/remove") {
+					handleRemove(uname, updText)
 				} else {
 					handleUnknownCommand(uname)
 				}
@@ -347,9 +358,8 @@ func handleRemove(username, msg string) {
 }
 
 func handleRemoveChannel(username, msg string) {
-	after, _ := strings.CutPrefix(msg, "/removeChannel")
-	concern, err := parseTopic(after)
-	fmt.Println(concern)
+	channel, _ := strings.CutPrefix(msg, "/removeChannel")
+	concern, err := parseChannelName(channel)
 	if err != nil {
 		sendMessage(username, err.Error())
 		return
@@ -374,7 +384,7 @@ func handlePause(username string) {
 	sendMessage(username, "Обновления поставлены на паузу!")
 }
 
-func handleUnPause(username string) {
+func handleContinue(username string) {
 	var err error
 	var messages []Message
 	if err = dataBase.unpauseUser(username); err != nil {
