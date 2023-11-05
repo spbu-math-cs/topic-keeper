@@ -46,24 +46,33 @@ func parseTopic(s string) (Concern, error) {
 		return Concern{}, wrongFmtError
 	}
 	chanName = strings.Trim(chanName, "\n ")
-	if !strings.HasPrefix(chanName, "@") {
-		return Concern{}, wrongFmtError
+
+	channelConcern, err := parseChannelName(chanName)
+	if err != nil {
+		return Concern{}, err
 	}
+
 	return Concern{
-		Channel: chanName[1:],
+		Channel: channelConcern.Channel,
 		Topic:   topicName,
 	}, nil
 }
 
 func parseChannelName(s string) (Concern, error) {
 	chanName := strings.Trim(s, "\n ")
-	if !strings.HasPrefix(chanName, "@") {
-		return Concern{}, wrongFmtError
+	if strings.HasPrefix(chanName, "@") {
+		return Concern{
+			Channel: chanName[1:],
+			Topic:   "",
+		}, nil
 	}
-	return Concern{
-		Channel: chanName[1:],
-		Topic:   "",
-	}, nil
+	if strings.HasPrefix(chanName, "https://t.me/") {
+		return Concern{
+			Channel: chanName[13:],
+			Topic:   "",
+		}, nil
+	}
+	return Concern{}, wrongFmtError
 }
 
 //echo $TOPIC_KEEPER_TOKEN
