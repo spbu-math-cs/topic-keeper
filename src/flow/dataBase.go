@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 
@@ -108,12 +107,11 @@ func (d *DataBase) removeTopic(user, channel, topic string) error {
 }
 
 func (d *DataBase) removeChannel(user, channel string) error {
-	cnt, err := d.Exec(
+	_, err := d.Exec(
 		"DELETE FROM channels WHERE nickname = $1 AND channel = $2",
 		user,
 		channel,
 	)
-	log.Println(cnt)
 	if err != nil {
 		return err
 	}
