@@ -303,7 +303,6 @@ func handleStart(username string) {
 	reply := "Привет! Бот предназначен для помощи в быстром и эффективном поиске нужной информации в чатах и темах на основе предоставленного списка."
 	msg := tgbotapi.NewMessage(userId, reply)
 	msg.ReplyMarkup = createMenuKeyboard()
-	//sendMessage(username, reply)
 	handleHelp(username)
 }
 
@@ -466,11 +465,11 @@ func setBotCommands(bot *tgbotapi.BotAPI) {
 		},
 		{
 			Command:     "pause",
-			Description: "Приостановка оновлений в боте",
+			Description: "Приостановка получения обновлений",
 		},
 		{
 			Command:     "continue",
-			Description: "Возобновление работы бота",
+			Description: "Возобновление получений обновлений",
 		},
 		{
 			Command:     "removeChannel",
