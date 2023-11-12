@@ -294,16 +294,44 @@ func sendNews(msg Message) {
 }
 
 func handleStart(username string) {
+	userId, err := dataBase.getID(username)
+	if err != nil {
+		sendMessage(username, err.Error())
+		log.Printf(err.Error())
+		return
+	}
 	reply := "Привет! Бот предназначен для помощи в быстром и эффективном поиске нужной информации в чатах и темах на основе предоставленного списка."
-	sendMessage(username, reply)
+	msg := tgbotapi.NewMessage(userId, reply)
+	msg.ReplyMarkup = createMenuKeyboard()
+	//sendMessage(username, reply)
 	handleHelp(username)
 }
 
+func createMenuKeyboard() tgbotapi.ReplyKeyboardMarkup {
+	keyboard := tgbotapi.NewReplyKeyboard(
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("/start"),
+			tgbotapi.NewKeyboardButton("/view"),
+		),
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("/pause"),
+			tgbotapi.NewKeyboardButton("/continue"),
+		),
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("/help"),
+		),
+	)
+	return keyboard
+}
+
 func handleHelp(username string) {
-	reply := "\n Мой набор команд включает в себя следующие опции:" + "\n" +
+	reply := "\n Мой набор команд включает в себя следующие опции: \n \n" +
 		"/view - для просмотра доступных каналов и связанных с ними тем. \n \n" +
-		"/remove <@название канала> <слово> - удаляет указанное слово из списка для поиска в конкретном канале.\n \n " +
-		"/add <@название канала> <слово> - добавляет указанное слово в список для поиска в конкретном канале. \n \n " +
+		"/add <@название канала>/<ссылка на канал> <слово> - добавляет указанное слово в список для поиска в конкретном канале. \n \n" +
+		"/remove <@название канала>/<ссылка на канал> <слово> - удаляет указанное слово из списка для поиска в конкретном канале.\n \n" +
+		"/pause - приостанавливает обновления в боте. \n \n" +
+		"/continue - возобновляет поток обновлений в боте после приостановки. \n \n" +
+		"/removeChannel <@название канала>/<ссылка на канал> - удаляет список для поиска в конкретном канале. \n \n" +
 		"Эти команды помогут вам управлять списком тем и слов для поиска, чтобы быстро находить нужную информацию в чатах."
 	sendMessage(username, reply)
 }
@@ -374,7 +402,8 @@ func handleRemoveChannel(username, msg string) {
 }
 
 func handleUnknownCommand(username string) {
-	reply := "Я не понимаю вашей команды. Воспользуйтесь \n /start \n /view \n /remove <name> <topic> \n /add <name> <topic>"
+	reply := "Я не понимаю вашей команды. Воспользуйтесь \n /start \n /view \n /add <name>/<link> <topic> \n /remove <name>/<link> <topic> \n " +
+		"/pause \n /continue \n /removeChannel <name>/<link> \n /help"
 	sendMessage(username, reply)
 }
 
@@ -434,6 +463,18 @@ func setBotCommands(bot *tgbotapi.BotAPI) {
 		{
 			Command:     "remove",
 			Description: "Удалить слово из списка для поиска",
+		},
+		{
+			Command:     "pause",
+			Description: "Приостановка оновлений в боте",
+		},
+		{
+			Command:     "continue",
+			Description: "Возобновление работы бота",
+		},
+		{
+			Command:     "removeChannel",
+			Description: "Удалить канал с его историей поиска",
 		},
 		{
 			Command:     "help",
