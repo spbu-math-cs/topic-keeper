@@ -130,8 +130,9 @@ func (d *DataBase) removeChannel(user, channel string) error {
 }
 
 func (d *DataBase) getTopics(channel string) ([]string, error) {
-	rows, err := d.Query(
-		"SELECT topic FROM channels WHERE channel = $1;",
+	query := fmt.Sprintf("SELECT topic FROM %s WHERE channel = $1;", d.Names.Channels)
+	rows, err := d.DB.Query(
+		query,
 		channel,
 	)
 	if err != nil {
