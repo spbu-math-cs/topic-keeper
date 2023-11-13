@@ -176,7 +176,13 @@ func main() {
 	if err := yaml.Unmarshal(rawDBConfig, &dbConfig); err != nil {
 		panic(err)
 	}
-	dataBase, err = NewDatabase(dbConfig)
+	dataBase, err = NewDatabase(dbConfig,
+		TablesNames{
+			Messages: "messages",
+			Users:    "users",
+			Channels: "channels",
+		},
+	)
 	if err != nil {
 		panic(err)
 	}
