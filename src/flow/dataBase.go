@@ -4,22 +4,27 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
-	"strconv"
 	"time"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
 )
 
+type Application = string
+
 const (
-	Delay = 10 * time.Second
+	Delay                  = 10 * time.Second
+	Telegram   Application = "telegram"
+	VK         Application = "vk"
+	MatterMost Application = "matter most"
 )
 
 type Message struct {
-	User    string `json:"user"`
-	Link    int    `json:"link"`
-	Channel string `json:"channel"`
-	Topic   string `json:"topic"`
-	Summary string `json:"summary"`
+	Application Application `json:"application"`
+	User        string      `json:"user"`
+	Link        string      `json:"link"`
+	Channel     string      `json:"channel"`
+	Topic       string      `json:"topic"`
+	Summary     string      `json:"summary"`
 }
 
 type LocalStorage interface {
@@ -233,7 +238,7 @@ func (d *DataBase) addDelayedMessage(message Message) error {
 	_, err := d.DB.Exec(
 		query,
 		message.User,
-		strconv.Itoa(message.Link),
+		message.Link,
 		message.Channel,
 		message.Topic,
 		message.Summary,
