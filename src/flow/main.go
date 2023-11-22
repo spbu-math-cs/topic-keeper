@@ -26,17 +26,22 @@ const (
 var rawDBConfig []byte
 
 type workEvent struct {
-	channelName string
+	application Application
+	channel     string
+	channelID   string
 	text        string
-	ID          int
+	link        string
+	messageID   string
 }
 
 var (
-	api       API
-	bot       *tgbotapi.BotAPI
-	dataBase  LocalStorage
-	sendChan  chan Message
-	openAIkey string
+	api              API
+	bot              *tgbotapi.BotAPI
+	dataBase         LocalStorage
+	sendChan         chan Message
+	openAIkey        string
+	workChans        []chan workEvent
+	telegramListener basicUpdatesListener
 )
 
 func parseTopic(s string) (Concern, error) {
@@ -74,15 +79,16 @@ func parseChannelName(s string) (string, error) {
 //echo $TOPIC_KEEPER_OPENAI_TOKEN
 //export TOPIC_KEEPER_OPENAI_TOKEN=""
 
-const format = `Topic was detected: [%s]
-In channel: @%s
+const format = `In application: %s 
+Topic was detected: [%s]
+In channel: %s
 Summary: %s
-link: https://t.me/%s/%d
+link: %s
 `
 
 func worker(workChan chan workEvent) {
 	for update := range workChan {
-		channel := update.channelName
+		channel := update.channel
 		msg := update.text
 
 		if found, err := dataBase.containsChannel(channel); !found || err != nil {
@@ -130,11 +136,12 @@ func worker(workChan chan workEvent) {
 
 			finalTopics := strings.Join(userTopics, ", ")
 			message := Message{
-				User:    user,
-				Link:    update.ID,
-				Channel: channel,
-				Topic:   finalTopics,
-				Summary: summary,
+				Application: update.application,
+				User:        user,
+				Link:        update.link,
+				Channel:     channel,
+				Topic:       finalTopics,
+				Summary:     summary,
 			}
 			if isPaused {
 				if err := dataBase.addDelayedMessage(message); err != nil {
@@ -162,14 +169,13 @@ func getHash(s string) uint32 {
 }
 
 func main() {
-	workChans := make([]chan workEvent, NWorkers)
+	workChans = make([]chan workEvent, NWorkers)
 	sendChan = make(chan Message, BaseCap)
 
 	for i := 0; i < NWorkers; i++ {
 		workChans[i] = make(chan workEvent)
 		go worker(workChans[i])
 	}
-	go sender()
 
 	var dbConfig DBConfig
 	var err error
@@ -201,77 +207,13 @@ func main() {
 	bot.Debug = true
 	log.Printf("Authorized on account: %s\n", bot.Self.UserName)
 
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates := bot.GetUpdatesChan(u)
-
-	keyboard := tgbotapi.NewReplyKeyboard(
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("/start"),
-			tgbotapi.NewKeyboardButton("/view"),
-			tgbotapi.NewKeyboardButton("/add"),
-			tgbotapi.NewKeyboardButton("/remove"),
-			tgbotapi.NewKeyboardButton("/removeChannel"),
-			tgbotapi.NewKeyboardButton("/pause"),
-			tgbotapi.NewKeyboardButton("/continue"),
-			tgbotapi.NewKeyboardButton("/help"),
-		),
-	)
 	api = basicAPI{}
-	for update := range updates {
-		switch {
-		case update.ChannelPost != nil:
-			hsh := getHash(update.ChannelPost.Chat.UserName)
-			workChans[hsh%NWorkers] <- workEvent{
-				channelName: update.ChannelPost.Chat.UserName,
-				text:        update.ChannelPost.Text,
-				ID:          update.ChannelPost.MessageID,
-			}
-		case update.Message != nil:
-			if update.Message.Chat.IsSuperGroup() {
-				hsh := getHash(update.Message.Chat.UserName)
-				workChans[hsh%NWorkers] <- workEvent{
-					channelName: update.Message.Chat.UserName,
-					text:        update.Message.Text,
-					ID:          update.Message.MessageID,
-				}
-				continue
-			}
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Выберите команду:")
-			msg.ReplyMarkup = keyboard
 
-			updText := strings.Trim(update.Message.Text, "\n ")
-			uname := update.Message.Chat.UserName
-			err := dataBase.addUser(uname, update.Message.Chat.ID)
-			if err != nil {
-				continue
-			}
+	telegramListener = New(bot)
+	go telegramListener.handleUpdates()
 
-			switch updText {
-			case "/start":
-				handleStart(uname)
-			case "/view":
-				handleView(uname)
-			case "/help":
-				handleHelp(uname)
-			case "/pause":
-				handlePause(uname)
-			case "/continue":
-				handleContinue(uname)
-			default:
-				if strings.HasPrefix(updText, "/add") {
-					handleAdd(uname, updText)
-				} else if strings.HasPrefix(updText, "/removeChannel") {
-					handleRemoveChannel(uname, updText)
-				} else if strings.HasPrefix(updText, "/remove") {
-					handleRemove(uname, updText)
-				} else {
-					handleUnknownCommand(uname)
-				}
-			}
-		}
-	}
+	sender()
+
 }
 
 func sendMessage(username string, text string) {
@@ -291,153 +233,12 @@ func sendNews(msg Message) {
 	if err != nil {
 		panic(err.Error())
 	}
-	text := fmt.Sprintf(format, msg.Topic, msg.Channel, msg.Summary, msg.Channel, msg.Link)
+	text := fmt.Sprintf(format, msg.Application, msg.Topic, msg.Channel, msg.Summary, msg.Link)
 	ans := tgbotapi.NewMessage(userId, text)
 	_, err = bot.Send(ans)
 	if err != nil {
 		log.Println(err.Error())
 	}
-}
-
-func handleStart(username string) {
-	userId, err := dataBase.getID(username)
-	if err != nil {
-		sendMessage(username, err.Error())
-		log.Printf(err.Error())
-		return
-	}
-	reply := "Привет! Бот предназначен для помощи в быстром и эффективном поиске нужной информации в чатах и темах на основе предоставленного списка."
-	msg := tgbotapi.NewMessage(userId, reply)
-	msg.ReplyMarkup = createMenuKeyboard()
-	handleHelp(username)
-}
-
-func createMenuKeyboard() tgbotapi.ReplyKeyboardMarkup {
-	keyboard := tgbotapi.NewReplyKeyboard(
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("/start"),
-			tgbotapi.NewKeyboardButton("/view"),
-		),
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("/pause"),
-			tgbotapi.NewKeyboardButton("/continue"),
-		),
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("/help"),
-		),
-	)
-	return keyboard
-}
-
-func handleHelp(username string) {
-	reply := "\n Мой набор команд включает в себя следующие опции: \n \n" +
-		"/view - для просмотра доступных каналов и связанных с ними тем. \n \n" +
-		"/add <@название канала>/<ссылка на канал> <слово> - добавляет указанное слово в список для поиска в конкретном канале. \n \n" +
-		"/remove <@название канала>/<ссылка на канал> <слово> - удаляет указанное слово из списка для поиска в конкретном канале.\n \n" +
-		"/pause - приостанавливает обновления в боте. \n \n" +
-		"/continue - возобновляет поток обновлений в боте после приостановки. \n \n" +
-		"/removeChannel <@название канала>/<ссылка на канал> - удаляет список для поиска в конкретном канале. \n \n" +
-		"Эти команды помогут вам управлять списком тем и слов для поиска, чтобы быстро находить нужную информацию в чатах."
-	sendMessage(username, reply)
-}
-
-func handleView(username string) {
-	topicByChan, err := dataBase.getUserInfo(username)
-	if err != nil {
-		sendMessage(username, err.Error())
-		return
-	}
-	str := strings.Builder{}
-	for ch, topics := range topicByChan {
-		str.WriteString(fmt.Sprintf("%s:\n", ch))
-		for _, topic := range topics {
-			str.WriteString(fmt.Sprintf("  - %s\n", topic))
-		}
-		str.WriteString("\n")
-	}
-	ans := str.String()
-	if ans == "" {
-		ans = "Ничего не отслеживается"
-	}
-	sendMessage(username, ans)
-}
-
-func handleAdd(username string, msg string) {
-	after, _ := strings.CutPrefix(msg, "/add")
-	concern, err := parseTopic(after)
-	fmt.Println(concern)
-	if err != nil {
-		sendMessage(username, err.Error())
-		return
-	}
-	if err := dataBase.add(username, concern.Channel, concern.Topic); err != nil {
-		sendMessage(username, err.Error())
-		return
-	}
-	sendMessage(username, "Топик добавлен!")
-}
-
-func handleRemove(username, msg string) {
-	after, _ := strings.CutPrefix(msg, "/remove")
-	concern, err := parseTopic(after)
-	fmt.Println(concern)
-	if err != nil {
-		sendMessage(username, err.Error())
-		return
-	}
-	if err := dataBase.removeTopic(username, concern.Channel, concern.Topic); err != nil {
-		sendMessage(username, err.Error())
-		return
-	}
-	sendMessage(username, "Топик удалён!")
-}
-
-func handleRemoveChannel(username, msg string) {
-	channel, _ := strings.CutPrefix(msg, "/removeChannel")
-	var err error
-	if channel, err = parseChannelName(channel); err != nil {
-		sendMessage(username, err.Error())
-		return
-	}
-	if err := dataBase.removeChannel(username, channel); err != nil {
-		sendMessage(username, err.Error())
-		return
-	}
-	sendMessage(username, "Канал удалён!")
-}
-
-func handleUnknownCommand(username string) {
-	reply := "Я не понимаю вашей команды. Воспользуйтесь \n /start \n /view \n /add <name>/<link> <topic> \n /remove <name>/<link> <topic> \n " +
-		"/pause \n /continue \n /removeChannel <name>/<link> \n /help"
-	sendMessage(username, reply)
-}
-
-func handlePause(username string) {
-	if err := dataBase.pauseUser(username); err != nil {
-		sendMessage(username, err.Error())
-		return
-	}
-	sendMessage(username, "Обновления поставлены на паузу!")
-}
-
-func handleContinue(username string) {
-	var err error
-	var messages []Message
-	if err = dataBase.unpauseUser(username); err != nil {
-		sendMessage(username, err.Error())
-		return
-	}
-
-	if messages, err = dataBase.getDelayedMessages(username); err != nil {
-		sendMessage(username, err.Error())
-		return
-	}
-
-	for _, msg := range messages {
-		sendNews(msg)
-	}
-
-	sendMessage(username, "Обновления сняты с паузы!")
 }
 
 func summarize(text string) string {
@@ -449,46 +250,4 @@ func summarize(text string) string {
 	}
 
 	return string(testRunes[:length])
-}
-
-func setBotCommands(bot *tgbotapi.BotAPI) {
-	commands := []tgbotapi.BotCommand{
-		{
-			Command:     "start",
-			Description: "Начать работу с ботом",
-		},
-		{
-			Command:     "view",
-			Description: "Просмотреть доступные каналы и темы",
-		},
-		{
-			Command:     "add",
-			Description: "Добавить слово в список для поиска",
-		},
-		{
-			Command:     "remove",
-			Description: "Удалить слово из списка для поиска",
-		},
-		{
-			Command:     "pause",
-			Description: "Приостановка получения обновлений",
-		},
-		{
-			Command:     "continue",
-			Description: "Возобновление получений обновлений",
-		},
-		{
-			Command:     "removeChannel",
-			Description: "Удалить канал с его историей поиска",
-		},
-		{
-			Command:     "help",
-			Description: "Получить помощь",
-		},
-	}
-	config := tgbotapi.NewSetMyCommands(commands...)
-	_, err := bot.Request(config)
-	if err != nil {
-		log.Printf(err.Error())
-	}
 }
