@@ -18,7 +18,7 @@ type TelegramHandler struct {
 	updates  tgbotapi.UpdatesChannel
 }
 
-func New(b *tgbotapi.BotAPI) *TelegramHandler {
+func newTelegramListener(b *tgbotapi.BotAPI) *TelegramHandler {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 	updates := b.GetUpdatesChan(u)
