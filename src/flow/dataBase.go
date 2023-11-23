@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
-	"log"
 	"time"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
@@ -19,10 +18,6 @@ const (
 	MatterMost Application = "matter most"
 )
 
-func getUsingApplications() []Application {
-	return []Application{VK, Telegram}
-}
-
 type Message struct {
 	Application Application `json:"application"`
 	User        string      `json:"user"`
@@ -34,11 +29,11 @@ type Message struct {
 
 type LocalStorage interface {
 	addUser(user string, id int64) error
-	addTopic(user, channel, topic string, application Application) error
+	add(user, channel, topic string, application Application) error
 	removeTopic(user, channel, topic string, application Application) error
 	removeChannel(user, channel string, application Application) error
 	getTopics(channel string, application Application) ([]string, error)
-	getUserInfo(user string) (map[Application]map[string][]string, error)
+	getUserInfo(user string) (map[string][]string, error)
 	getUsers(channel string, topics []string, application Application) (map[string][]string, error)
 	setTime(user, channel, topic string, application Application) error
 	containsChannel(channel string, application Application) (bool, error)
@@ -48,11 +43,7 @@ type LocalStorage interface {
 	unpauseUser(user string) error
 	isPaused(user string) (bool, error)
 	getID(user string) (int64, error)
-	getVKPublicNameByID(groupID string) (string, error)
-	addVKPublic(groupName, groupId string, postID int) error
 	getVKPublic() ([]string, error)
-	updateVKLastPostID(groupID string, postID int) error
-	getVKLastPostID(groupID string) (int, error)
 }
 
 type DataBase struct {
@@ -72,7 +63,6 @@ type TablesNames struct {
 	Channels string
 	Users    string
 	Messages string
-	VKPostID string
 }
 
 //go:embed migrations/init.sql
@@ -91,7 +81,7 @@ func NewDatabase(cfg DBConfig, names TablesNames) (*DataBase, error) {
 	return &DataBase{db, names}, nil
 }
 
-func (d *DataBase) addTopic(user, channel, topic string, application Application) error {
+func (d *DataBase) add(user, channel, topic string, application Application) error {
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE nickname=$1 AND channel=$2 AND topic=$3 AND application=$4", d.Names.Channels)
 	row := d.DB.QueryRow(query,
 		user, channel, topic, application)
@@ -170,55 +160,25 @@ func (d *DataBase) getTopics(channel string, application Application) ([]string,
 	return topics, nil
 }
 
-func (d *DataBase) getUserInfo(user string) (map[Application]map[string][]string, error) {
-	queryVK := fmt.Sprintf("SELECT groupid, public_name FROM %s", d.Names.VKPostID)
-	rows, err := d.DB.Query(queryVK)
-	if err != nil {
-		return nil, err
-	}
-	vkMap := make(map[string]string)
-	for rows.Next() {
-		var id int
-		var publicName string
-		err = rows.Scan(&id, &publicName)
-		sID := fmt.Sprintf("%d", id)
-		vkMap[sID] = publicName
-		log.Println(publicName, id)
-	}
-
-	query := fmt.Sprintf("SELECT channel, topic, application FROM %s WHERE nickname = $1", d.Names.Channels)
-	rows, err = d.DB.Query(
+func (d *DataBase) getUserInfo(user string) (map[string][]string, error) {
+	query := fmt.Sprintf("SELECT channel, topic FROM %s WHERE nickname = $1", d.Names.Channels)
+	rows, err := d.DB.Query(
 		query,
 		user,
 	)
 	if err != nil {
 		return nil, err
 	}
-
-	answer := make(map[Application]map[string][]string)
-	for _, application := range getUsingApplications() {
-		curApplicationMap := make(map[string][]string)
-		answer[application] = curApplicationMap
-	}
-
+	answer := make(map[string][]string)
 	for rows.Next() {
 		var channel, topic string
-		var application Application
-		err = rows.Scan(&channel, &topic, &application)
+		err = rows.Scan(&channel, &topic)
 		if err != nil {
 			return nil, err
 		}
-		switch application {
-		case VK:
-			channel = vkMap[channel]
-			curTopics := answer[VK][channel]
-			curTopics = append(curTopics, topic)
-			answer[VK][channel] = curTopics
-		case Telegram:
-			curTopics := answer[Telegram][channel]
-			curTopics = append(curTopics, topic)
-			answer[Telegram][channel] = curTopics
-		}
+		curTopics := answer[channel]
+		curTopics = append(curTopics, topic)
+		answer[channel] = curTopics
 	}
 
 	return answer, nil
@@ -415,7 +375,7 @@ func (d *DataBase) addUser(user string, id int64) error {
 }
 
 func (d *DataBase) getVKPublic() ([]string, error) {
-	query := fmt.Sprintf("SELECT channel FROM %s WHERE application=$1 GROUP BY channel", d.Names.Channels)
+	query := fmt.Sprintf("SELECT channel FROM %s WHERE application=$1", d.Names.Channels)
 	rows, err := d.DB.Query(
 		query,
 		VK,
@@ -427,72 +387,9 @@ func (d *DataBase) getVKPublic() ([]string, error) {
 
 	var ansRows []string
 
-	for rows.Next() {
-		var row string
-		err = rows.Scan(&row)
-		if err != nil {
-			return nil, err
-		}
-		ansRows = append(ansRows, row)
+	if err := rows.Scan(&ansRows); err != nil {
+		return nil, err
 	}
 
 	return ansRows, nil
-}
-
-func (d *DataBase) updateVKLastPostID(groupID string, postID int) error {
-	query := fmt.Sprintf(
-		`INSERT INTO %s (groupid, last_post) VALUES ($1, $2) 
-				ON CONFLICT (groupid) DO UPDATE SET last_post =  $3`,
-		d.Names.VKPostID)
-	_, err := d.DB.Exec(
-		query,
-		groupID,
-		postID,
-		postID,
-	)
-	return err
-}
-
-func (d *DataBase) getVKLastPostID(groupID string) (int, error) {
-	query := fmt.Sprintf("SELECT last_post FROM %s WHERE groupID=$1", d.Names.VKPostID)
-	row := d.DB.QueryRow(
-		query,
-		groupID,
-	)
-	var count int
-	err := row.Scan(&count)
-	if err != nil {
-		return -1, err
-	}
-
-	return count, nil
-}
-
-func (d *DataBase) addVKPublic(groupName, groupID string, postID int) error {
-	query := fmt.Sprintf(
-		`INSERT INTO %s (groupid, last_post, public_name) VALUES ($1, $2, $3) 
-				ON CONFLICT (groupid) DO UPDATE SET public_name =  $4`,
-		d.Names.VKPostID)
-	_, err := d.DB.Exec(
-		query,
-		groupID,
-		postID,
-		groupName,
-		groupName,
-	)
-	return err
-}
-
-func (d *DataBase) getVKPublicNameByID(groupID string) (string, error) {
-	query := fmt.Sprintf("SELECT public_name FROM %s WHERE groupid = $1", d.Names.VKPostID)
-	row := d.DB.QueryRow(query, groupID)
-
-	var name string
-	err := row.Scan(&name)
-	if err != nil {
-		return "", err
-	}
-
-	return name, nil
-
 }
