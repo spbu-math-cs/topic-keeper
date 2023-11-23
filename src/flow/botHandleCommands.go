@@ -2,11 +2,9 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"strconv"
-	"strings"
-
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"log"
+	"strings"
 )
 
 func handleStart(username string) {
@@ -23,22 +21,18 @@ func handleStart(username string) {
 }
 
 func handleView(username string) {
-	totalInfo, err := dataBase.getUserInfo(username)
+	topicByChan, err := dataBase.getUserInfo(username)
 	if err != nil {
-		log.Println(err.Error())
 		sendMessage(username, err.Error())
 		return
 	}
 	str := strings.Builder{}
-	for application, topicByChan := range totalInfo {
-		str.WriteString(fmt.Sprintf("%s:\n", application))
-		for ch, topics := range topicByChan {
-			str.WriteString(fmt.Sprintf(" %s:\n", ch))
-			for _, topic := range topics {
-				str.WriteString(fmt.Sprintf("   - %s\n", topic))
-			}
-			str.WriteString("\n")
+	for ch, topics := range topicByChan {
+		str.WriteString(fmt.Sprintf("%s:\n", ch))
+		for _, topic := range topics {
+			str.WriteString(fmt.Sprintf("  - %s\n", topic))
 		}
+		str.WriteString("\n")
 	}
 	ans := str.String()
 	if ans == "" {
@@ -49,100 +43,22 @@ func handleView(username string) {
 
 func handleAdd(username string, msg string) {
 	after, _ := strings.CutPrefix(msg, "/add")
-	elements := strings.Fields(after)
-	if len(elements) != 3 {
-		sendMessage(username, "Неверное количество аргументов. Используйте /add <название канала> <ссылка/топик> <платформа>")
-		return
-	}
-	platform := elements[2]
-
-	if platform != "VK" && platform != "TG" {
-		sendMessage(username, "Неподдерживаемая платформа. Используйте 'VK' или 'TG'.")
-		return
-	}
-	if platform == "VK" {
-		after = strings.TrimSuffix(after, "VK")
-		handleAddVK(username, after)
-	} else {
-		after = strings.TrimSuffix(after, "TG")
-		handleAddTelegram(username, after)
-	}
-}
-
-func handleAddTelegram(username string, msg string) {
-	concern, err := parseTopic(msg)
+	concern, err := parseTopic(after)
 	fmt.Println(concern)
 	if err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
-	if err := dataBase.addTopic(username, concern.Channel, concern.Topic, Telegram); err != nil {
+	if err := dataBase.add(username, concern.Channel, concern.Topic, Telegram); err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
 	sendMessage(username, "Топик добавлен!")
 }
-func handleAddVK(username, text string) {
-	after := strings.TrimSpace(text)
-	link, topic, ok := strings.Cut(after, " ")
 
-	if !ok {
-		sendMessage(username, wrongFmtError.Error())
-		return
-	}
-
-	objectName, objectType, id, err := getVKInfo(link, vkToken)
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
-
-	if objectType != "group" {
-		log.Println("Resolved object is not a group")
-		return
-	}
-
-	groupID := fmt.Sprintf("%d", id)
-
-	topic = strings.TrimSpace(topic)
-
-	if err := dataBase.addTopic(username, groupID, topic, VK); err != nil {
-		log.Println(err.Error())
-		return
-	}
-
-	if err := dataBase.addVKPublic(objectName, groupID, 0); err != nil {
-		log.Println(err.Error())
-		return
-	}
-
-	sendMessage(username, "Топик добавлен")
-}
-func handleRemoveTopic(username, msg string) {
+func handleRemove(username, msg string) {
 	after, _ := strings.CutPrefix(msg, "/remove")
-	elements := strings.Fields(after)
-
-	if len(elements) != 3 {
-		sendMessage(username, "Неверное количество аргументов. Используйте /remove <название канала> <ссылка/топик> <платформа>")
-		return
-	}
-	platform := elements[2]
-
-	if platform != "VK" && platform != "TG" {
-		sendMessage(username, "Неподдерживаемая платформа. Используйте 'VK' или 'TG'.")
-		return
-	}
-
-	if platform == "VK" {
-		after = strings.TrimSuffix(after, "VK")
-		handleRemoveTopicVK(username, after)
-	} else {
-		after = strings.TrimSuffix(after, "TG")
-		handleRemoveTopicTelegram(username, after)
-	}
-}
-func handleRemoveTopicTelegram(username, msg string) {
-	concern, err := parseTopic(msg)
+	concern, err := parseTopic(after)
 	fmt.Println(concern)
 	if err != nil {
 		sendMessage(username, err.Error())
@@ -154,60 +70,9 @@ func handleRemoveTopicTelegram(username, msg string) {
 	}
 	sendMessage(username, "Топик удалён!")
 }
-func handleRemoveTopicVK(username, text string) {
-	after := strings.TrimSpace(text)
-	link, topic, ok := strings.Cut(after, " ")
 
-	if !ok {
-		sendMessage(username, wrongFmtError.Error())
-	}
-
-	_, objectType, id, err := getVKInfo(link, vkToken)
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
-
-	if objectType != "group" {
-		log.Println("Resolved object is not a group")
-		return
-	}
-
-	groupID := fmt.Sprintf("%d", id)
-
-	topic = strings.TrimSpace(topic)
-
-	if err := dataBase.removeTopic(username, groupID, topic, VK); err != nil {
-		log.Println(err.Error())
-		return
-	}
-
-	sendMessage(username, "Топик удален")
-}
 func handleRemoveChannel(username, msg string) {
-	after, _ := strings.CutPrefix(msg, "/removeChannel")
-	elements := strings.Fields(after)
-
-	if len(elements) != 2 {
-		sendMessage(username, "Неверное количество аргументов. Используйте /removeChannel <название канала> <платформа>")
-		return
-	}
-
-	channel := elements[0]
-	platform := elements[1]
-
-	if platform != "VK" && platform != "TG" {
-		sendMessage(username, "Неподдерживаемая платформа. Используйте 'VK' или 'TG'.")
-		return
-	}
-
-	if platform == "VK" {
-		handleRemoveChannelVK(username, channel)
-	} else {
-		handleRemoveChannelTelegram(username, channel)
-	}
-}
-func handleRemoveChannelTelegram(username, channel string) {
+	channel, _ := strings.CutPrefix(msg, "/removeChannel")
 	var err error
 	if channel, err = parseChannelName(channel); err != nil {
 		sendMessage(username, err.Error())
@@ -220,38 +85,9 @@ func handleRemoveChannelTelegram(username, channel string) {
 	sendMessage(username, "Канал удалён!")
 }
 
-func handleRemoveChannelVK(username, text string) {
-	after := strings.TrimSpace(text)
-	link, _, ok := strings.Cut(after, " ")
-
-	if !ok {
-		sendMessage(username, wrongFmtError.Error())
-	}
-
-	_, objectType, id, err := getVKInfo(link, vkToken)
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
-
-	if objectType != "group" {
-		log.Println("Resolved object is not a group")
-		return
-	}
-
-	groupID := fmt.Sprintf("%d", id)
-
-	if err := dataBase.removeChannel(username, groupID, VK); err != nil {
-		log.Println(err.Error())
-		return
-	}
-
-	sendMessage(username, "Канал удален")
-}
-
 func handleUnknownCommand(username string) {
-	reply := "Я не понимаю вашей команды. Воспользуйтесь \n /start \n /view \n /add <name>/<link> <topic> <platform> \n /remove <name>/<link> <topic> <platform> \n " +
-		"/pause \n /continue \n /removeChannel <name>/<link> <platform> \n /help"
+	reply := "Я не понимаю вашей команды. Воспользуйтесь \n /start \n /view \n /add <name>/<link> <topic> \n /remove <name>/<link> <topic> \n " +
+		"/pause \n /continue \n /removeChannel <name>/<link> \n /help"
 	sendMessage(username, reply)
 }
 
@@ -286,12 +122,11 @@ func handleContinue(username string) {
 func handleHelp(username string) {
 	reply := "\n Мой набор команд включает в себя следующие опции: \n \n" +
 		"/view - для просмотра доступных каналов и связанных с ними тем. \n \n" +
-		"/add <@название канала>/<ссылка на канал> <слово> <платформа> - добавляет указанное слово в список для поиска в конкретном канале. \n \n" +
-		"/remove <@название канала>/<ссылка на канал> <слово> <платформа> - удаляет указанное слово из списка для поиска в конкретном канале.\n \n" +
+		"/add <@название канала>/<ссылка на канал> <слово> - добавляет указанное слово в список для поиска в конкретном канале. \n \n" +
+		"/remove <@название канала>/<ссылка на канал> <слово> - удаляет указанное слово из списка для поиска в конкретном канале.\n \n" +
 		"/pause - приостанавливает обновления в боте. \n \n" +
 		"/continue - возобновляет поток обновлений в боте после приостановки. \n \n" +
-		"/removeChannel <@название канала>/<ссылка на канал> <платформа> - удаляет список для поиска в конкретном канале. \n" +
-		"В качестве платформы нужно указывать либо VK, либо TG.\n \n" +
+		"/removeChannel <@название канала>/<ссылка на канал> - удаляет список для поиска в конкретном канале. \n \n" +
 		"Эти команды помогут вам управлять списком тем и слов для поиска, чтобы быстро находить нужную информацию в чатах."
 	sendMessage(username, reply)
 }
@@ -353,40 +188,4 @@ func createMenuKeyboard() tgbotapi.ReplyKeyboardMarkup {
 		),
 	)
 	return keyboard
-}
-
-func HandlegetHistoryVK(username, msg string) {
-	after, _ := strings.CutPrefix(msg, "/historyVK")
-	txt := strings.Fields(after)
-	if len(txt) != 2 {
-		sendMessage(username, wrongFmtError.Error())
-		return
-	}
-	link := txt[0]
-	count, err := strconv.Atoi(txt[1])
-	if err != nil || count < 0 {
-		sendMessage(username, "Incorrect count of posts")
-		return
-	}
-
-	publicName, objectType, objectID, err := getVKInfo(link, vkToken)
-	if err != nil {
-		sendMessage(username, err.Error())
-		return
-	}
-	if objectType != "group" {
-		sendMessage(username, "Resolved object is not a group")
-		return
-	}
-
-	ID := fmt.Sprintf("%d", objectID)
-
-	hsh := getHash(publicName) % VKNHistoryWorkers
-	VKHistoryChans[hsh] <- UserHistory{
-		user:       username,
-		link:       link,
-		publicID:   ID,
-		postsCount: count,
-		publicName: publicName,
-	}
 }
