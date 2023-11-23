@@ -49,7 +49,7 @@ func handleAdd(username string, msg string) {
 		sendMessage(username, err.Error())
 		return
 	}
-	if err := dataBase.add(username, concern.Channel, concern.Topic); err != nil {
+	if err := dataBase.add(username, concern.Channel, concern.Topic, Telegram); err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
@@ -64,7 +64,7 @@ func handleRemove(username, msg string) {
 		sendMessage(username, err.Error())
 		return
 	}
-	if err := dataBase.removeTopic(username, concern.Channel, concern.Topic); err != nil {
+	if err := dataBase.removeTopic(username, concern.Channel, concern.Topic, Telegram); err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
@@ -78,7 +78,7 @@ func handleRemoveChannel(username, msg string) {
 		sendMessage(username, err.Error())
 		return
 	}
-	if err := dataBase.removeChannel(username, channel); err != nil {
+	if err := dataBase.removeChannel(username, channel, Telegram); err != nil {
 		sendMessage(username, err.Error())
 		return
 	}

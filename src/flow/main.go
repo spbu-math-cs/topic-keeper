@@ -90,15 +90,16 @@ func worker(workChan chan workEvent) {
 	for update := range workChan {
 		channel := update.channel
 		msg := update.text
+		application := update.application
 
-		if found, err := dataBase.containsChannel(channel); !found || err != nil {
+		if found, err := dataBase.containsChannel(channel, application); !found || err != nil {
 			if err != nil {
 				log.Printf(err.Error())
 			}
 			continue
 		}
 
-		possibleTopics, err := dataBase.getTopics(channel)
+		possibleTopics, err := dataBase.getTopics(channel, application)
 		if err != nil {
 			log.Printf(err.Error())
 			continue
@@ -120,7 +121,7 @@ func worker(workChan chan workEvent) {
 			summary = summarize(msg)
 		}
 
-		sendUsers, err := dataBase.getUsers(channel, foundTopics)
+		sendUsers, err := dataBase.getUsers(channel, foundTopics, application)
 		for user, userTopics := range sendUsers {
 			isPaused, err := dataBase.isPaused(user)
 			if err != nil {
@@ -128,7 +129,7 @@ func worker(workChan chan workEvent) {
 				continue
 			}
 			for _, topic := range userTopics {
-				if err := dataBase.setTime(user, channel, topic); err != nil {
+				if err := dataBase.setTime(user, channel, topic, application); err != nil {
 					log.Printf(err.Error())
 					continue
 				}
