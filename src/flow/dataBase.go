@@ -29,20 +29,21 @@ type Message struct {
 
 type LocalStorage interface {
 	addUser(user string, id int64) error
-	add(user, channel, topic string) error
-	removeTopic(user, channel, topic string) error
-	removeChannel(user, channel string) error
-	getTopics(channel string) ([]string, error)
+	add(user, channel, topic string, application Application) error
+	removeTopic(user, channel, topic string, application Application) error
+	removeChannel(user, channel string, application Application) error
+	getTopics(channel string, application Application) ([]string, error)
 	getUserInfo(user string) (map[string][]string, error)
-	getUsers(channel string, topics []string) (map[string][]string, error)
-	setTime(user, channel, topic string) error
-	containsChannel(channel string) (bool, error)
+	getUsers(channel string, topics []string, application Application) (map[string][]string, error)
+	setTime(user, channel, topic string, application Application) error
+	containsChannel(channel string, application Application) (bool, error)
 	addDelayedMessage(messages Message) error
 	getDelayedMessages(user string) ([]Message, error)
 	pauseUser(user string) error
 	unpauseUser(user string) error
 	isPaused(user string) (bool, error)
 	getID(user string) (int64, error)
+	getVKPublic() ([]string, error)
 }
 
 type DataBase struct {
@@ -80,10 +81,10 @@ func NewDatabase(cfg DBConfig, names TablesNames) (*DataBase, error) {
 	return &DataBase{db, names}, nil
 }
 
-func (d *DataBase) add(user, channel, topic string) error {
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE nickname=$1 AND channel=$2 AND topic=$3", d.Names.Channels)
+func (d *DataBase) add(user, channel, topic string, application Application) error {
+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE nickname=$1 AND channel=$2 AND topic=$3 AND application=$4", d.Names.Channels)
 	row := d.DB.QueryRow(query,
-		user, channel, topic)
+		user, channel, topic, application)
 
 	var count int64
 	err := row.Scan(&count)
@@ -95,25 +96,27 @@ func (d *DataBase) add(user, channel, topic string) error {
 		return nil
 	}
 
-	query = fmt.Sprintf("INSERT INTO %s (nickname, channel, topic, last_time) VALUES ($1,$2,$3,$4)", d.Names.Channels)
+	query = fmt.Sprintf("INSERT INTO %s (nickname, channel, topic, last_time, application) VALUES ($1,$2,$3,$4,$5)", d.Names.Channels)
 	_, err = d.DB.Exec(
 		query,
 		user,
 		channel,
 		topic,
 		time.Now().Add(-Delay),
+		application,
 	)
 
 	return err
 }
 
-func (d *DataBase) removeTopic(user, channel, topic string) error {
-	query := fmt.Sprintf("DELETE FROM %s WHERE nickname = $1 AND channel = $2 AND topic = $3", d.Names.Channels)
+func (d *DataBase) removeTopic(user, channel, topic string, application Application) error {
+	query := fmt.Sprintf("DELETE FROM %s WHERE nickname = $1 AND channel = $2 AND topic = $3 AND application = $4", d.Names.Channels)
 	_, err := d.DB.Exec(
 		query,
 		user,
 		channel,
 		topic,
+		application,
 	)
 	if err != nil {
 		return err
@@ -121,12 +124,13 @@ func (d *DataBase) removeTopic(user, channel, topic string) error {
 	return nil
 }
 
-func (d *DataBase) removeChannel(user, channel string) error {
-	query := fmt.Sprintf("DELETE FROM %s WHERE nickname = $1 AND channel = $2", d.Names.Channels)
+func (d *DataBase) removeChannel(user, channel string, application Application) error {
+	query := fmt.Sprintf("DELETE FROM %s WHERE nickname = $1 AND channel = $2 AND application = $3", d.Names.Channels)
 	_, err := d.DB.Exec(
 		query,
 		user,
 		channel,
+		application,
 	)
 	if err != nil {
 		return err
@@ -134,11 +138,12 @@ func (d *DataBase) removeChannel(user, channel string) error {
 	return nil
 }
 
-func (d *DataBase) getTopics(channel string) ([]string, error) {
-	query := fmt.Sprintf("SELECT topic FROM %s WHERE channel = $1;", d.Names.Channels)
+func (d *DataBase) getTopics(channel string, application Application) ([]string, error) {
+	query := fmt.Sprintf("SELECT topic FROM %s WHERE channel = $1 AND application = $2", d.Names.Channels)
 	rows, err := d.DB.Query(
 		query,
 		channel,
+		application,
 	)
 	if err != nil {
 		return nil, err
@@ -179,15 +184,16 @@ func (d *DataBase) getUserInfo(user string) (map[string][]string, error) {
 	return answer, nil
 }
 
-func (d *DataBase) getUsers(channel string, topics []string) (map[string][]string, error) {
+func (d *DataBase) getUsers(channel string, topics []string, application Application) (map[string][]string, error) {
 	answer := make(map[string][]string)
 	for _, topic := range topics {
-		query := fmt.Sprintf("SELECT nickname FROM %s WHERE channel = $1 AND topic = $2 AND last_time < $3 ", d.Names.Channels)
+		query := fmt.Sprintf("SELECT nickname FROM %s WHERE channel = $1 AND topic = $2 AND last_time < $3 AND application = $4 ", d.Names.Channels)
 		rows, err := d.DB.Query(
 			query,
 			channel,
 			topic,
 			time.Now().Add(-Delay),
+			application,
 		)
 		if err != nil {
 			return nil, err
@@ -206,23 +212,25 @@ func (d *DataBase) getUsers(channel string, topics []string) (map[string][]strin
 	return answer, nil
 }
 
-func (d *DataBase) setTime(user, channel, topic string) error {
-	query := fmt.Sprintf("UPDATE %s SET last_time = $1 WHERE  nickname = $2 AND channel = $3 AND topic = $4", d.Names.Channels)
+func (d *DataBase) setTime(user, channel, topic string, application Application) error {
+	query := fmt.Sprintf("UPDATE %s SET last_time = $1 WHERE  nickname = $2 AND channel = $3 AND topic = $4 AND application = $5", d.Names.Channels)
 	_, err := d.DB.Exec(
 		query,
 		time.Now(),
 		user,
 		channel,
 		topic,
+		application,
 	)
 	return err
 }
 
-func (d *DataBase) containsChannel(channel string) (bool, error) {
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE channel=$1", d.Names.Channels)
+func (d *DataBase) containsChannel(channel string, application Application) (bool, error) {
+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE channel=$1 AND application = $2", d.Names.Channels)
 	row := d.DB.QueryRow(
 		query,
 		channel,
+		application,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -234,7 +242,7 @@ func (d *DataBase) containsChannel(channel string) (bool, error) {
 }
 
 func (d *DataBase) addDelayedMessage(message Message) error {
-	query := fmt.Sprintf("INSERT INTO %s (nickname, link, channel, topic, summary) VALUES ($1,$2,$3,$4,$5)", d.Names.Messages)
+	query := fmt.Sprintf("INSERT INTO %s (nickname, link, channel, topic, summary, application) VALUES ($1,$2,$3,$4,$5,$6)", d.Names.Messages)
 	_, err := d.DB.Exec(
 		query,
 		message.User,
@@ -242,6 +250,7 @@ func (d *DataBase) addDelayedMessage(message Message) error {
 		message.Channel,
 		message.Topic,
 		message.Summary,
+		message.Application,
 	)
 
 	return err
@@ -259,7 +268,7 @@ func (d *DataBase) getDelayedMessages(user string) ([]Message, error) {
 	var messages []Message
 	for rows.Next() {
 		var message Message
-		err = rows.Scan(&message.User, &message.Link, &message.Channel, &message.Topic, &message.Summary)
+		err = rows.Scan(&message.User, &message.Link, &message.Channel, &message.Topic, &message.Summary, &message.Application)
 		if err != nil {
 			return nil, err
 		}
@@ -363,4 +372,24 @@ func (d *DataBase) addUser(user string, id int64) error {
 	)
 
 	return err
+}
+
+func (d *DataBase) getVKPublic() ([]string, error) {
+	query := fmt.Sprintf("SELECT channel FROM %s WHERE application=$1", d.Names.Channels)
+	rows, err := d.DB.Query(
+		query,
+		VK,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var ansRows []string
+
+	if err := rows.Scan(&ansRows); err != nil {
+		return nil, err
+	}
+
+	return ansRows, nil
 }

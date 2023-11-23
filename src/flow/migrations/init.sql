@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS channels (
     nickname TEXT,
     channel TEXT,
     topic TEXT,
-    last_time TIMESTAMP WITH TIME ZONE
+    last_time TIMESTAMP WITH TIME ZONE,
+    application TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -16,5 +17,6 @@ CREATE TABLE IF NOT EXISTS messages (
     link TEXT,
     channel TEXT,
     topic TEXT,
-    summary TEXT
+    summary TEXT,
+    application TEXT
 );
