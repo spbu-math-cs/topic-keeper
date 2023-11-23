@@ -209,7 +209,7 @@ func main() {
 
 	api = basicAPI{}
 
-	telegramListener = New(bot)
+	telegramListener = newTelegramListener(bot)
 	go telegramListener.handleUpdates()
 
 	sender()
