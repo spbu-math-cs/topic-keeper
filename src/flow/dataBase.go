@@ -44,6 +44,8 @@ type LocalStorage interface {
 	isPaused(user string) (bool, error)
 	getID(user string) (int64, error)
 	getVKPublic() ([]string, error)
+	updateVKLastPostID(groupID string, postID int) error
+	getVKLastPostID(groupID string) (int, error)
 }
 
 type DataBase struct {
@@ -63,6 +65,7 @@ type TablesNames struct {
 	Channels string
 	Users    string
 	Messages string
+	VKPostID string
 }
 
 //go:embed migrations/init.sql
@@ -375,7 +378,7 @@ func (d *DataBase) addUser(user string, id int64) error {
 }
 
 func (d *DataBase) getVKPublic() ([]string, error) {
-	query := fmt.Sprintf("SELECT channel FROM %s WHERE application=$1", d.Names.Channels)
+	query := fmt.Sprintf("SELECT channel FROM %s WHERE application=$1 GROUP BY channel", d.Names.Channels)
 	rows, err := d.DB.Query(
 		query,
 		VK,
@@ -392,4 +395,29 @@ func (d *DataBase) getVKPublic() ([]string, error) {
 	}
 
 	return ansRows, nil
+}
+
+func (d *DataBase) updateVKLastPostID(groupID string, postID int) error {
+	query := fmt.Sprintf("UPDATE %s SET lastPost = $1 WHERE  gorupID = $2 ", d.Names.VKPostID)
+	_, err := d.DB.Exec(
+		query,
+		postID,
+		groupID,
+	)
+	return err
+}
+
+func (d *DataBase) getVKLastPostID(groupID string) (int, error) {
+	query := fmt.Sprintf("SELECT lastPost FROM %s WHERE gorupID=$1", d.Names.VKPostID)
+	row := d.DB.QueryRow(
+		query,
+		groupID,
+	)
+	var count int
+	err := row.Scan(&count)
+	if err != nil {
+		return -1, err
+	}
+
+	return count, nil
 }
