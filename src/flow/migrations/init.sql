@@ -20,3 +20,10 @@ CREATE TABLE IF NOT EXISTS messages (
     summary TEXT,
     application TEXT
 );
+
+
+CREATE TABLE IF NOT EXISTS vk_last_id (
+    gorupID TEXT,
+    lastPost INT
+)
+
