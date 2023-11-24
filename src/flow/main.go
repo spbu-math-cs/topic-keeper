@@ -188,6 +188,7 @@ func main() {
 			Messages: "messages",
 			Users:    "users",
 			Channels: "channels",
+			VKPostID: "vk_last_id",
 		},
 	)
 	if err != nil {
