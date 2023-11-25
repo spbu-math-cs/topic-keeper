@@ -2,11 +2,10 @@ package main
 
 import (
 	"fmt"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"log"
 	"strconv"
 	"strings"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 const (
@@ -42,24 +41,22 @@ func (t *TelegramHandler) handleUpdates() {
 			if update.ChannelPost.Chat.UserName != "" {
 				hsh := getHash(update.ChannelPost.Chat.UserName)
 				w := workEvent{
-					application:    Telegram,
-					channel:        update.ChannelPost.Chat.UserName,
-					channelID:      strconv.FormatInt(update.ChannelPost.Chat.ID, 10),
-					text:           update.ChannelPost.Text,
-					messageID:      strconv.Itoa(update.ChannelPost.MessageID),
-					historyRequest: nil,
+					application: Telegram,
+					channel:     update.ChannelPost.Chat.UserName,
+					channelID:   strconv.FormatInt(update.ChannelPost.Chat.ID, 10),
+					text:        update.ChannelPost.Text,
+					messageID:   strconv.Itoa(update.ChannelPost.MessageID),
 				}
 				w.link = createPublicLink(w)
 				workChans[hsh%NWorkers] <- w
 			} else {
 				hsh := getHash(update.ChannelPost.Chat.Title)
 				w := workEvent{
-					application:    Telegram,
-					channel:        update.ChannelPost.Chat.Title,
-					channelID:      getPrivateID(update.ChannelPost.Chat.ID),
-					text:           update.ChannelPost.Text,
-					messageID:      strconv.Itoa(update.ChannelPost.MessageID),
-					historyRequest: nil,
+					application: Telegram,
+					channel:     update.ChannelPost.Chat.Title,
+					channelID:   getPrivateID(update.ChannelPost.Chat.ID),
+					text:        update.ChannelPost.Text,
+					messageID:   strconv.Itoa(update.ChannelPost.MessageID),
 				}
 				w.link = createPrivateLink(w)
 				workChans[hsh%NWorkers] <- w
@@ -69,24 +66,22 @@ func (t *TelegramHandler) handleUpdates() {
 				if update.Message.Chat.UserName != "" {
 					hsh := getHash(update.Message.Chat.UserName)
 					w := workEvent{
-						application:    Telegram,
-						channel:        update.Message.Chat.UserName,
-						channelID:      strconv.FormatInt(update.Message.Chat.ID, 10),
-						text:           update.Message.Text,
-						messageID:      update.Message.Text,
-						historyRequest: nil,
+						application: Telegram,
+						channel:     update.Message.Chat.UserName,
+						channelID:   strconv.FormatInt(update.Message.Chat.ID, 10),
+						text:        update.Message.Text,
+						messageID:   update.Message.Text,
 					}
 					w.link = createPublicLink(w)
 					workChans[hsh%NWorkers] <- w
 				} else {
 					hsh := getHash(update.Message.Chat.Title)
 					w := workEvent{
-						application:    Telegram,
-						channel:        update.Message.Chat.Title,
-						channelID:      getPrivateID(update.Message.Chat.ID),
-						text:           update.Message.Text,
-						messageID:      update.Message.Text,
-						historyRequest: nil,
+						application: Telegram,
+						channel:     update.Message.Chat.Title,
+						channelID:   getPrivateID(update.Message.Chat.ID),
+						text:        update.Message.Text,
+						messageID:   update.Message.Text,
 					}
 					w.link = createPrivateLink(w)
 					workChans[hsh%NWorkers] <- w
@@ -121,12 +116,16 @@ func (t *TelegramHandler) handleUpdates() {
 			case "/continue":
 				handleContinue(uname)
 			default:
-				if strings.HasPrefix(updText, "/add") {
+				if strings.HasPrefix(updText, "/addVK") {
+					handleAddVK(uname, updText)
+				} else if strings.HasPrefix(updText, "/add") {
 					handleAdd(uname, updText)
+				} else if strings.HasPrefix(updText, "/removeChannelVK") {
+					handleRemoveChannelVK(uname, updText)
 				} else if strings.HasPrefix(updText, "/removeChannel") {
 					handleRemoveChannel(uname, updText)
-				} else if strings.HasPrefix(updText, "/historyVK") {
-					HandlegetHistoryVK(uname, updText)
+				} else if strings.HasPrefix(updText, "/removeVK") {
+					handleRemoveTopicVK(uname, updText)
 				} else if strings.HasPrefix(updText, "/remove") {
 					handleRemoveTopic(uname, updText)
 				} else {
