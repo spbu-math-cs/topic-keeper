@@ -49,14 +49,14 @@ func handleAdd(username string, msg string) {
 		sendMessage(username, err.Error())
 		return
 	}
-	if err := dataBase.add(username, concern.Channel, concern.Topic, Telegram); err != nil {
+	if err := dataBase.addTopic(username, concern.Channel, concern.Topic, Telegram); err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
 	sendMessage(username, "Топик добавлен!")
 }
 
-func handleRemove(username, msg string) {
+func handleRemoveTopic(username, msg string) {
 	after, _ := strings.CutPrefix(msg, "/remove")
 	concern, err := parseTopic(after)
 	fmt.Println(concern)
@@ -188,4 +188,98 @@ func createMenuKeyboard() tgbotapi.ReplyKeyboardMarkup {
 		),
 	)
 	return keyboard
+}
+
+func handleAddVK(username, text string) {
+	after, _ := strings.CutPrefix(text, "/addVK")
+	after = strings.TrimSpace(after)
+	link, topic, ok := strings.Cut(after, " ")
+
+	if !ok {
+		sendMessage(username, wrongFmtError.Error())
+	}
+
+	objectType, id, err := getVKInfo(link, vkToken)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	if objectType != "group" {
+		log.Println("Resolved object is not a group")
+		return
+	}
+
+	groupID := fmt.Sprintf("%d", id)
+
+	topic = strings.TrimSpace(topic)
+
+	if err := dataBase.addTopic(username, groupID, topic, VK); err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	sendMessage(username, "Топик добавлен")
+}
+
+func handleRemoveTopicVK(username, text string) {
+	after, _ := strings.CutPrefix(text, "/removeVK")
+	after = strings.TrimSpace(after)
+	link, topic, ok := strings.Cut(after, " ")
+
+	if !ok {
+		sendMessage(username, wrongFmtError.Error())
+	}
+
+	objectType, id, err := getVKInfo(link, vkToken)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	if objectType != "group" {
+		log.Println("Resolved object is not a group")
+		return
+	}
+
+	groupID := fmt.Sprintf("%d", id)
+
+	topic = strings.TrimSpace(topic)
+
+	if err := dataBase.removeTopic(username, groupID, topic, VK); err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	sendMessage(username, "Топик удален")
+}
+
+func handleRemoveChannelVK(username, text string) {
+	after, _ := strings.CutPrefix(text, "/removeChannelVK")
+	after = strings.TrimSpace(after)
+	link, _, ok := strings.Cut(after, " ")
+
+	if !ok {
+		sendMessage(username, wrongFmtError.Error())
+	}
+
+	objectType, id, err := getVKInfo(link, vkToken)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	if objectType != "group" {
+		log.Println("Resolved object is not a group")
+		return
+	}
+
+	groupID := fmt.Sprintf("%d", id)
+
+	if err := dataBase.removeChannel(username, groupID, VK); err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	sendMessage(username, "Канал удален")
 }

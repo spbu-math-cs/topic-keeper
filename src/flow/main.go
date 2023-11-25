@@ -35,6 +35,7 @@ type workEvent struct {
 }
 
 var (
+	vkToken          string
 	api              API
 	bot              *tgbotapi.BotAPI
 	dataBase         LocalStorage
@@ -42,6 +43,7 @@ var (
 	openAIkey        string
 	workChans        []chan workEvent
 	telegramListener basicUpdatesListener
+	vkListener       basicUpdatesListener
 )
 
 func parseTopic(s string) (Concern, error) {
@@ -197,6 +199,7 @@ func main() {
 
 	token := os.Getenv("TOPIC_KEEPER_TOKEN")
 	openAIkey = os.Getenv("TOPIC_KEEPER_OPENAI_TOKEN")
+	vkToken = "b397ce84b397ce84b397ce8432b0819482bb397b397ce84d6cdd2ca964821d7fd266b76"
 
 	bot, err = tgbotapi.NewBotAPI(token)
 	if err != nil {
@@ -211,8 +214,11 @@ func main() {
 
 	api = basicAPI{}
 
-	telegramListener = newTelegramListener(bot)
+	telegramListener = newTelegramHandler(bot)
 	go telegramListener.handleUpdates()
+
+	vk := VKHandler{accessToken: "b397ce84b397ce84b397ce8432b0819482bb397b397ce84d6cdd2ca964821d7fd266b76"}
+	go vk.handleUpdates()
 
 	sender()
 

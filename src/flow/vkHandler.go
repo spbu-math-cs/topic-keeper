@@ -1,180 +1,251 @@
 package main
 
-type VKListener struct {
-	accessToken string
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"slices"
+	"sort"
+	"strings"
+	"time"
+)
+
+const (
+	vkObjectInfoRequest = "https://api.vk.com/method/utils.resolveScreenName?screen_name=%s&access_token=%s&v=%s"
+	VKGetPostRequest    = "https://api.vk.com/method/wall.get?owner_id=-%s&count=%s&access_token=%s&v=%s"
+	VKPostLink          = "https://vk.com/wall-%s_%d"
+	apiVersion          = "5.154"
+	VKNWorkers          = 30
+)
+
+type Post struct {
+	ID          int       `json:"id"`
+	Text        string    `json:"text"`
+	FetchedTime time.Time `json:"fetched_time"`
+	URL         string    `json:"url"`
 }
 
-func (*VKListener) handleUpdates() {
-
+type VKAPIResponse struct {
+	Response struct {
+		Items []Post `json:"items"`
+	} `json:"response"`
 }
 
-func newVKListener() VKListener {
-	return VKListener{}
+type ResolvedInfo struct {
+	ObjectType string `json:"type"`
+	ObjectID   int    `json:"object_id"`
 }
 
-// import (
-// 	"encoding/json"
-// 	"fmt"
-// 	"io/ioutil"
-// 	"log"
-// 	"net/http"
-// 	"os"
-// 	"os/signal"
-// 	"strings"
-// 	"sync"
-// 	"time"
-// )
+type VKHandler struct {
+	accessToken       string
+	groupSegmentation map[int][]string
+	VKChans           []chan []string
+}
 
-// type Post struct {
-// 	ID          int       `json:"id"`
-// 	Text        string    `json:"text"`
-// 	FetchedTime time.Time `json:"fetched_time"`
-// 	URL         string    `json:"url"`
-// }
+func (vk *VKHandler) handleUpdates() {
+	groups, err := dataBase.getVKPublic()
+	if err != nil {
+		log.Println(err.Error())
+	}
 
-// var (
-// 	posts []Post
-// 	mutex sync.Mutex
-// )
+	for _, group := range groups {
+		vk.initLastPostID(group, vk.accessToken)
+	}
 
-// type VKAPIResponse struct {
-// 	Response struct {
-// 		Items []Post `json:"items"`
-// 	} `json:"response"`
-// }
+	vkChans := make([]chan []string, VKNWorkers)
+	for i := 0; i < VKNWorkers; i++ {
+		vkChans[i] = make(chan []string)
+		go vk.vkWorker(vkChans[i])
+	}
 
-// func resolveScreenName(accessToken, screenName string) (*ResolvedInfo, error) {
-// 	apiVersion := "5.154"
-// 	requestURL := fmt.Sprintf("https://api.vk.com/method/utils.resolveScreenName?screen_name=%s&access_token=%s&v=%s",
-// 		screenName, accessToken, apiVersion)
+	segmentation := make(map[int][]string)
 
-// 	resp, err := http.Get(requestURL)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer resp.Body.Close()
+	vk.VKChans = vkChans
+	vk.groupSegmentation = segmentation
 
-// 	var result struct {
-// 		Response ResolvedInfo `json:"response"`
-// 	}
+	go vk.refreshGroups(time.Second * 30)
+}
 
-// 	body, err := ioutil.ReadAll(resp.Body)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+func (vk *VKHandler) vkWorker(groups chan []string) {
+	curGroups := make([]string, 0)
+	for {
+		select {
+		case curGroups = <-groups:
+		default:
+		}
 
-// 	err = json.Unmarshal(body, &result)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+		for _, group := range curGroups {
+			posts := vk.fetchPosts(group)
+			if posts == nil {
+				continue
+			}
+			hsh := getHash(group) % NWorkers
+			for _, post := range posts {
+				msg := workEvent{
+					application: VK,
+					channel:     group,
+					channelID:   group,
+					text:        post.Text,
+					link:        post.URL,
+					messageID:   string(rune(post.ID)),
+				}
+				workChans[hsh] <- msg
+			}
+		}
 
-// 	return &result.Response, nil
-// }
+		time.Sleep(time.Second * 30)
+	}
+}
 
-// type ResolvedInfo struct {
-// 	ObjectType string `json:"type"`
-// 	ObjectID   int    `json:"object_id"`
-// }
+func (vk *VKHandler) refreshGroups(period time.Duration) {
+	curGroups, err := dataBase.getVKPublic()
+	log.Println(curGroups)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
 
-// func extractGroupNameFromURL(url string) string {
-// 	url = strings.TrimPrefix(url, "http://")
-// 	url = strings.TrimPrefix(url, "https://")
-// 	url = strings.TrimPrefix(url, "www.")
+	curSegmentation := make(map[int][]string)
+	for _, group := range curGroups {
+		hash := int(getHash(group) % VKNWorkers)
+		curSegmentation[hash] = append(curSegmentation[hash], group)
+	}
 
-// 	parts := strings.Split(url, "/")
-// 	if len(parts) > 1 && parts[0] == "vk.com" {
-// 		return parts[1]
-// 	}
+	for i := 0; i < VKNWorkers; i++ {
+		cur := curSegmentation[i]
+		sort.Strings(cur)
+		was := vk.groupSegmentation[i]
+		sort.Strings(was)
+		if !slices.Equal(was, cur) {
+			vk.VKChans[i] <- cur
+		}
+	}
 
-// 	return ""
-// }
+	time.Sleep(period)
+}
 
-// func fetchPosts(groupID string) {
-// 	accessToken := "b397ce84b397ce84b397ce8432b0819482bb397b397ce84d6cdd2ca964821d7fd266b76"
-// 	apiVersion := "5.154"
-// 	count := "10"
+func (vk *VKHandler) initLastPostID(groupID, accessToken string) {
+	posts, err := vk.getLatestPosts(groupID, "1")
+	if err != nil {
+		log.Printf("Error fetching initial post: %s", err)
+		return
+	}
 
-// 	url := fmt.Sprintf("https://api.vk.com/method/wall.get?owner_id=-%s&count=%s&access_token=%s&v=%s",
-// 		groupID, count, accessToken, apiVersion)
+	if len(posts) > 0 {
+		err := dataBase.updateVKLastPostID(groupID, posts[0].ID)
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+	}
+}
 
-// 	resp, err := http.Get(url)
-// 	if err != nil {
-// 		log.Printf("Error fetching posts: %s", err)
-// 		return
-// 	}
-// 	defer resp.Body.Close()
+func (vk *VKHandler) getLatestPosts(groupID string, count string) ([]Post, error) {
+	url := fmt.Sprintf(VKGetPostRequest, groupID, count, vk.accessToken, apiVersion)
 
-// 	body, err := ioutil.ReadAll(resp.Body)
-// 	if err != nil {
-// 		log.Printf("Error reading response body: %s", err)
-// 		return
-// 	}
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-// 	var apiResp VKAPIResponse
-// 	err = json.Unmarshal(body, &apiResp)
-// 	if err != nil {
-// 		log.Printf("Error decoding JSON: %s", err)
-// 		return
-// 	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 
-// 	mutex.Lock()
-// 	defer mutex.Unlock()
-// 	for _, post := range apiResp.Response.Items {
-// 		if !postExists(post.ID) {
-// 			post.FetchedTime = time.Now()
-// 			post.URL = fmt.Sprintf("https://vk.com/wall-%s_%d", groupID)
-// 			posts = append(posts, post)
-// 			printBlue(fmt.Sprintf("%d\n", post.ID))
-// 			log.Printf("New post fetched: %+v\n", post)
-// 		}
-// 	}
-// }
+	var apiResp VKAPIResponse
+	err = json.Unmarshal(body, &apiResp)
+	if err != nil {
+		return nil, err
+	}
 
-// func postExists(id int) bool {
-// 	for _, p := range posts {
-// 		if p.ID == id {
-// 			return true
-// 		}
-// 	}
-// 	return false
-// }
+	return apiResp.Response.Items, nil
+}
 
-// func startFetchingPosts(groupID string) {
-// 	ticker := time.NewTicker(5 * time.Second)
-// 	go func() {
-// 		for {
-// 			<-ticker.C
-// 			fetchPosts(groupID)
-// 		}
-// 	}()
-// }
+func (vk *VKHandler) fetchPosts(groupID string) []Post {
+	posts, err := vk.getLatestPosts(groupID, "1")
+	if err != nil {
+		log.Printf("Error fetching posts: %s", err)
+		return nil
+	}
 
-// func printBlue(text string) {
-// 	fmt.Printf("\033[34m%s\033[0m", text)
-// }
+	lastPostID, err := dataBase.getVKLastPostID(groupID)
+	if err != nil {
+		log.Println(err.Error())
+		return nil
+	}
 
-// func main() {
-// 	groupName := extractGroupNameFromURL("https://vk.com/club223517383")
-// 	resolvedInfo, err := resolveScreenName("b397ce84b397ce84b397ce8432b0819482bb397b397ce84d6cdd2ca964821d7fd266b76", groupName)
-// 	if err != nil {
-// 		log.Fatalf("Error resolving screen name: %s", err)
-// 	}
+	var ans []Post
+	for _, post := range posts {
+		if post.ID > lastPostID {
+			lastPostID = post.ID
+			post.FetchedTime = time.Now()
+			post.URL = fmt.Sprintf(VKPostLink, groupID, post.ID)
+			log.Printf("New post fetched: %+v\n", post)
+			ans = append(ans, post)
+		}
+	}
 
-// 	if resolvedInfo.ObjectType != "group" {
-// 		log.Fatalf("Resolved object is not a group")
-// 	}
+	if err := dataBase.updateVKLastPostID(groupID, lastPostID); err != nil {
+		return nil
+	}
 
-// 	groupID := fmt.Sprintf("%d", resolvedInfo.ObjectID)
+	return ans
+}
 
-// 	startFetchingPosts(groupID)
-// 	quit := make(chan os.Signal, 1)
-// 	signal.Notify(quit, os.Interrupt)
+func resolveScreenName(screenName, accessToken string) (*ResolvedInfo, error) {
+	requestURL := fmt.Sprintf(vkObjectInfoRequest, screenName, accessToken, apiVersion)
 
-// 	// Запуск фоновой задачи
-// 	startFetchingPosts(groupID)
+	resp, err := http.Get(requestURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-// 	// Ожидание сигнала завершения
-// 	<-quit
+	var result struct {
+		Response ResolvedInfo `json:"response"`
+	}
 
-// 	log.Println("Shutting down the application...")
-// }
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return &result.Response, nil
+}
+
+func extractGroupNameFromURL(url string) string {
+	url = strings.TrimPrefix(url, "http://")
+	url = strings.TrimPrefix(url, "https://")
+	url = strings.TrimPrefix(url, "www.")
+
+	parts := strings.Split(url, "/")
+	if len(parts) > 1 && parts[0] == "vk.com" {
+		return parts[1]
+	}
+
+	return ""
+}
+
+func getVKInfo(groupLink, accessToken string) (string, int, error) {
+	name := extractGroupNameFromURL(groupLink)
+	if name == "" {
+		return "", -1, errors.New("Неправильная ссылка")
+
+	}
+	resolve, err := resolveScreenName(name, accessToken)
+	if err != nil {
+		log.Println(err.Error())
+		return "", -1, err
+	}
+	return resolve.ObjectType, resolve.ObjectID, nil
+}

@@ -29,7 +29,7 @@ type Message struct {
 
 type LocalStorage interface {
 	addUser(user string, id int64) error
-	add(user, channel, topic string, application Application) error
+	addTopic(user, channel, topic string, application Application) error
 	removeTopic(user, channel, topic string, application Application) error
 	removeChannel(user, channel string, application Application) error
 	getTopics(channel string, application Application) ([]string, error)
@@ -84,7 +84,7 @@ func NewDatabase(cfg DBConfig, names TablesNames) (*DataBase, error) {
 	return &DataBase{db, names}, nil
 }
 
-func (d *DataBase) add(user, channel, topic string, application Application) error {
+func (d *DataBase) addTopic(user, channel, topic string, application Application) error {
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE nickname=$1 AND channel=$2 AND topic=$3 AND application=$4", d.Names.Channels)
 	row := d.DB.QueryRow(query,
 		user, channel, topic, application)
@@ -390,25 +390,34 @@ func (d *DataBase) getVKPublic() ([]string, error) {
 
 	var ansRows []string
 
-	if err := rows.Scan(&ansRows); err != nil {
-		return nil, err
+	for rows.Next() {
+		var row string
+		err = rows.Scan(&row)
+		if err != nil {
+			return nil, err
+		}
+		ansRows = append(ansRows, row)
 	}
 
 	return ansRows, nil
 }
 
 func (d *DataBase) updateVKLastPostID(groupID string, postID int) error {
-	query := fmt.Sprintf("UPDATE %s SET lastPost = $1 WHERE  gorupID = $2 ", d.Names.VKPostID)
+	query := fmt.Sprintf(
+		`INSERT INTO %s (groupid, lastPost) VALUES ($1, $2) 
+				ON CONFLICT (groupid) DO UPDATE SET lastPost =  $3`,
+		d.Names.VKPostID)
 	_, err := d.DB.Exec(
 		query,
-		postID,
 		groupID,
+		postID,
+		postID,
 	)
 	return err
 }
 
 func (d *DataBase) getVKLastPostID(groupID string) (int, error) {
-	query := fmt.Sprintf("SELECT lastPost FROM %s WHERE gorupID=$1", d.Names.VKPostID)
+	query := fmt.Sprintf("SELECT lastPost FROM %s WHERE groupID=$1", d.Names.VKPostID)
 	row := d.DB.QueryRow(
 		query,
 		groupID,

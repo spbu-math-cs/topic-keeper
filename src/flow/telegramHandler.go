@@ -18,7 +18,7 @@ type TelegramHandler struct {
 	updates  tgbotapi.UpdatesChannel
 }
 
-func newTelegramListener(b *tgbotapi.BotAPI) *TelegramHandler {
+func newTelegramHandler(b *tgbotapi.BotAPI) *TelegramHandler {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 	updates := b.GetUpdatesChan(u)
@@ -116,12 +116,18 @@ func (t *TelegramHandler) handleUpdates() {
 			case "/continue":
 				handleContinue(uname)
 			default:
-				if strings.HasPrefix(updText, "/add") {
+				if strings.HasPrefix(updText, "/addVK") {
+					handleAddVK(uname, updText)
+				} else if strings.HasPrefix(updText, "/add") {
 					handleAdd(uname, updText)
+				} else if strings.HasPrefix(updText, "/removeChannelVK") {
+					handleRemoveChannelVK(uname, updText)
 				} else if strings.HasPrefix(updText, "/removeChannel") {
 					handleRemoveChannel(uname, updText)
+				} else if strings.HasPrefix(updText, "/removeVK") {
+					handleRemoveTopicVK(uname, updText)
 				} else if strings.HasPrefix(updText, "/remove") {
-					handleRemove(uname, updText)
+					handleRemoveTopic(uname, updText)
 				} else {
 					handleUnknownCommand(uname)
 				}
