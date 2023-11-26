@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"log"
 	"strconv"
 	"strings"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 const (
@@ -116,16 +117,10 @@ func (t *TelegramHandler) handleUpdates() {
 			case "/continue":
 				handleContinue(uname)
 			default:
-				if strings.HasPrefix(updText, "/addVK") {
-					handleAddVK(uname, updText)
-				} else if strings.HasPrefix(updText, "/add") {
+				if strings.HasPrefix(updText, "/add") {
 					handleAdd(uname, updText)
-				} else if strings.HasPrefix(updText, "/removeChannelVK") {
-					handleRemoveChannelVK(uname, updText)
 				} else if strings.HasPrefix(updText, "/removeChannel") {
 					handleRemoveChannel(uname, updText)
-				} else if strings.HasPrefix(updText, "/removeVK") {
-					handleRemoveTopicVK(uname, updText)
 				} else if strings.HasPrefix(updText, "/remove") {
 					handleRemoveTopic(uname, updText)
 				} else {
