@@ -1,5 +1,5 @@
 package main
 
-type basicUpdatesListener interface {
+type UpdatesListener interface {
 	handleUpdates()
 }
