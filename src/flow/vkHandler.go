@@ -228,6 +228,10 @@ func extractGroupNameFromURL(url string) string {
 	url = strings.TrimPrefix(url, "https://")
 	url = strings.TrimPrefix(url, "www.")
 
+	if strings.HasPrefix(url, "@") {
+		return strings.TrimPrefix(url, "@")
+	}
+
 	parts := strings.Split(url, "/")
 	if len(parts) > 1 && parts[0] == "vk.com" {
 		return parts[1]
