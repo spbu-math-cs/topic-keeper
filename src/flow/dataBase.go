@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"log"
 	"time"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
@@ -33,7 +34,7 @@ type LocalStorage interface {
 	removeTopic(user, channel, topic string, application Application) error
 	removeChannel(user, channel string, application Application) error
 	getTopics(channel string, application Application) ([]string, error)
-	getUserInfo(user string) (map[string][]string, error)
+	getUserInfo(user string) (map[Application]map[string][]string, error)
 	getUsers(channel string, topics []string, application Application) (map[string][]string, error)
 	setTime(user, channel, topic string, application Application) error
 	containsChannel(channel string, application Application) (bool, error)
@@ -43,6 +44,7 @@ type LocalStorage interface {
 	unpauseUser(user string) error
 	isPaused(user string) (bool, error)
 	getID(user string) (int64, error)
+	addVKPublic(groupName, groupId string, postID int) error
 	getVKPublic() ([]string, error)
 	updateVKLastPostID(groupID string, postID int) error
 	getVKLastPostID(groupID string) (int, error)
@@ -163,25 +165,55 @@ func (d *DataBase) getTopics(channel string, application Application) ([]string,
 	return topics, nil
 }
 
-func (d *DataBase) getUserInfo(user string) (map[string][]string, error) {
-	query := fmt.Sprintf("SELECT channel, topic FROM %s WHERE nickname = $1", d.Names.Channels)
-	rows, err := d.DB.Query(
+func (d *DataBase) getUserInfo(user string) (map[Application]map[string][]string, error) {
+	queryVK := fmt.Sprintf("SELECT groupid, public_name FROM %s", d.Names.VKPostID)
+	rows, err := d.DB.Query(queryVK)
+	if err != nil {
+		return nil, err
+	}
+	vkMap := make(map[string]string)
+	for rows.Next() {
+		var id int
+		var publicName string
+		err = rows.Scan(&id, &publicName)
+		sID := fmt.Sprintf("%d", id)
+		vkMap[sID] = publicName
+		log.Println(publicName, id)
+	}
+
+	query := fmt.Sprintf("SELECT channel, topic, application FROM %s WHERE nickname = $1", d.Names.Channels)
+	rows, err = d.DB.Query(
 		query,
 		user,
 	)
 	if err != nil {
 		return nil, err
 	}
-	answer := make(map[string][]string)
+
+	answer := make(map[Application]map[string][]string)
+	vk := make(map[string][]string)
+	answer[VK] = vk
+	tg := make(map[string][]string)
+	answer[Telegram] = tg
+
 	for rows.Next() {
 		var channel, topic string
-		err = rows.Scan(&channel, &topic)
+		var application Application
+		err = rows.Scan(&channel, &topic, &application)
 		if err != nil {
 			return nil, err
 		}
-		curTopics := answer[channel]
-		curTopics = append(curTopics, topic)
-		answer[channel] = curTopics
+		switch application {
+		case VK:
+			channel = vkMap[channel]
+			curTopics := answer[VK][channel]
+			curTopics = append(curTopics, topic)
+			answer[VK][channel] = curTopics
+		case Telegram:
+			curTopics := answer[Telegram][channel]
+			curTopics = append(curTopics, topic)
+			answer[Telegram][channel] = curTopics
+		}
 	}
 
 	return answer, nil
@@ -404,8 +436,8 @@ func (d *DataBase) getVKPublic() ([]string, error) {
 
 func (d *DataBase) updateVKLastPostID(groupID string, postID int) error {
 	query := fmt.Sprintf(
-		`INSERT INTO %s (groupid, lastPost) VALUES ($1, $2) 
-				ON CONFLICT (groupid) DO UPDATE SET lastPost =  $3`,
+		`INSERT INTO %s (groupid, last_post) VALUES ($1, $2) 
+				ON CONFLICT (groupid) DO UPDATE SET last_post =  $3`,
 		d.Names.VKPostID)
 	_, err := d.DB.Exec(
 		query,
@@ -417,7 +449,7 @@ func (d *DataBase) updateVKLastPostID(groupID string, postID int) error {
 }
 
 func (d *DataBase) getVKLastPostID(groupID string) (int, error) {
-	query := fmt.Sprintf("SELECT lastPost FROM %s WHERE groupID=$1", d.Names.VKPostID)
+	query := fmt.Sprintf("SELECT last_post FROM %s WHERE groupID=$1", d.Names.VKPostID)
 	row := d.DB.QueryRow(
 		query,
 		groupID,
@@ -429,4 +461,19 @@ func (d *DataBase) getVKLastPostID(groupID string) (int, error) {
 	}
 
 	return count, nil
+}
+
+func (d *DataBase) addVKPublic(groupName, groupID string, postID int) error {
+	query := fmt.Sprintf(
+		`INSERT INTO %s (groupid, last_post, public_name) VALUES ($1, $2, $3) 
+				ON CONFLICT (groupid) DO UPDATE SET public_name =  $4`,
+		d.Names.VKPostID)
+	_, err := d.DB.Exec(
+		query,
+		groupID,
+		postID,
+		groupName,
+		groupName,
+	)
+	return err
 }
