@@ -50,25 +50,21 @@ func handleView(username string) {
 func handleAdd(username string, msg string) {
 	after, _ := strings.CutPrefix(msg, "/add")
 	elements := strings.Fields(after)
-	if len(elements) < 3 {
-		sendMessage(username, "Недостаточно аргументов. Используйте /add <название канала> <ссылка/топик> <платформа>")
-		return
-	}
-	if len(elements) > 3 {
-		sendMessage(username, "Слишком много аргументов. Используйте /add <название канала> <ссылка/топик> <платформа>")
+	if len(elements) != 3 {
+		sendMessage(username, "Неверное количество аргументов. Используйте /add <название канала> <ссылка/топик> <платформа>")
 		return
 	}
 	platform := elements[2]
 
-	if platform != "VK" && platform != "tg" {
-		sendMessage(username, "Неподдерживаемая платформа. Используйте 'VK' или 'tg'.")
+	if platform != "VK" && platform != "TG" {
+		sendMessage(username, "Неподдерживаемая платформа. Используйте 'VK' или 'TG'.")
 		return
 	}
 	if platform == "VK" {
 		after = strings.TrimSuffix(after, "VK")
 		handleAddVK(username, after)
 	} else {
-		after = strings.TrimSuffix(after, "tg")
+		after = strings.TrimSuffix(after, "TG")
 		handleAddTelegram(username, after)
 	}
 }
@@ -126,18 +122,14 @@ func handleRemoveTopic(username, msg string) {
 	after, _ := strings.CutPrefix(msg, "/remove")
 	elements := strings.Fields(after)
 
-	if len(elements) < 3 {
-		sendMessage(username, "Недостаточно аргументов. Используйте /remove <название канала> <ссылка/топик> <платформа>")
-		return
-	}
-	if len(elements) > 3 {
-		sendMessage(username, "Слишком много аргументов. Используйте /remove <название канала> <ссылка/топик> <платформа>")
+	if len(elements) != 3 {
+		sendMessage(username, "Неверное количество аргументов. Используйте /remove <название канала> <ссылка/топик> <платформа>")
 		return
 	}
 	platform := elements[2]
 
-	if platform != "VK" && platform != "tg" {
-		sendMessage(username, "Неподдерживаемая платформа. Используйте 'VK' или 'tg'.")
+	if platform != "VK" && platform != "TG" {
+		sendMessage(username, "Неподдерживаемая платформа. Используйте 'VK' или 'TG'.")
 		return
 	}
 
@@ -145,7 +137,7 @@ func handleRemoveTopic(username, msg string) {
 		after = strings.TrimSuffix(after, "VK")
 		handleRemoveTopicVK(username, after)
 	} else {
-		after = strings.TrimSuffix(after, "tg")
+		after = strings.TrimSuffix(after, "TG")
 		handleRemoveTopicTelegram(username, after)
 	}
 }
@@ -196,20 +188,16 @@ func handleRemoveChannel(username, msg string) {
 	after, _ := strings.CutPrefix(msg, "/removeChannel")
 	elements := strings.Fields(after)
 
-	if len(elements) < 2 {
-		sendMessage(username, "Недостаточно аргументов. Используйте /removeChannel <название канала> <платформа>")
-		return
-	}
-	if len(elements) > 2 {
-		sendMessage(username, "Слишком много аргументов. Используйте /removeChannel <название канала> <платформа>")
+	if len(elements) != 2 {
+		sendMessage(username, "Неверное количество аргументов. Используйте /removeChannel <название канала> <платформа>")
 		return
 	}
 
 	channel := elements[0]
 	platform := elements[1]
 
-	if platform != "VK" && platform != "tg" {
-		sendMessage(username, "Неподдерживаемая платформа. Используйте 'VK' или 'tg'.")
+	if platform != "VK" && platform != "TG" {
+		sendMessage(username, "Неподдерживаемая платформа. Используйте 'VK' или 'TG'.")
 		return
 	}
 
@@ -303,7 +291,7 @@ func handleHelp(username string) {
 		"/pause - приостанавливает обновления в боте. \n \n" +
 		"/continue - возобновляет поток обновлений в боте после приостановки. \n \n" +
 		"/removeChannel <@название канала>/<ссылка на канал> <платформа> - удаляет список для поиска в конкретном канале. \n" +
-		"В качестве платформы нужно указывать либо VK, либо tg.\n \n" +
+		"В качестве платформы нужно указывать либо VK, либо TG.\n \n" +
 		"Эти команды помогут вам управлять списком тем и слов для поиска, чтобы быстро находить нужную информацию в чатах."
 	sendMessage(username, reply)
 }
