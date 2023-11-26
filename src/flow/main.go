@@ -4,12 +4,11 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"hash/fnv"
 	"log"
 	"os"
 	"strings"
-
-	"gopkg.in/yaml.v2"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -25,13 +24,18 @@ const (
 //go:embed db_config.yml
 var rawDBConfig []byte
 
+type historyRequest struct {
+	user string
+}
+
 type workEvent struct {
-	application Application
-	channel     string
-	channelID   string
-	text        string
-	link        string
-	messageID   string
+	application    Application
+	channel        string
+	channelID      string
+	text           string
+	link           string
+	messageID      string
+	historyRequest *historyRequest
 }
 
 var (
@@ -42,8 +46,8 @@ var (
 	sendChan         chan Message
 	openAIkey        string
 	workChans        []chan workEvent
-	telegramListener basicUpdatesListener
-	vkListener       basicUpdatesListener
+	telegramListener UpdatesListener
+	vkListener       VKHandler
 )
 
 func parseTopic(s string) (Concern, error) {
@@ -94,6 +98,10 @@ func worker(workChan chan workEvent) {
 		msg := update.text
 		application := update.application
 
+		if update.application == VK {
+			channel = update.channelID
+		}
+
 		if found, err := dataBase.containsChannel(channel, application); !found || err != nil {
 			if err != nil {
 				log.Printf(err.Error())
@@ -108,8 +116,10 @@ func worker(workChan chan workEvent) {
 		}
 
 		var foundTopics []string
-		if foundTopics, err = api.analyze(msg, possibleTopics); err != nil {
-			log.Printf(err.Error())
+		if foundTopics, err = api.analyze(msg, possibleTopics); err != nil || len(foundTopics) == 0 {
+			if err != nil {
+				log.Println(err.Error())
+			}
 			continue
 		}
 
@@ -123,17 +133,26 @@ func worker(workChan chan workEvent) {
 			summary = summarize(msg)
 		}
 
-		sendUsers, err := dataBase.getUsers(channel, foundTopics, application)
+		sendUsers := make(map[string][]string)
+		if update.historyRequest == nil {
+			sendUsers, err = dataBase.getUsers(channel, foundTopics, application)
+		} else {
+			sendUsers[update.historyRequest.user] = foundTopics
+		}
+
 		for user, userTopics := range sendUsers {
-			isPaused, err := dataBase.isPaused(user)
-			if err != nil {
-				log.Printf(err.Error())
-				continue
-			}
-			for _, topic := range userTopics {
-				if err := dataBase.setTime(user, channel, topic, application); err != nil {
+			isPaused := false
+			if update.historyRequest == nil {
+				isPaused, err = dataBase.isPaused(user)
+				if err != nil {
 					log.Printf(err.Error())
 					continue
+				}
+				for _, topic := range userTopics {
+					if err := dataBase.setTime(user, channel, topic, application); err != nil {
+						log.Printf(err.Error())
+						continue
+					}
 				}
 			}
 
@@ -142,7 +161,7 @@ func worker(workChan chan workEvent) {
 				Application: update.application,
 				User:        user,
 				Link:        update.link,
-				Channel:     channel,
+				Channel:     update.channel,
 				Topic:       finalTopics,
 				Summary:     summary,
 			}
@@ -217,8 +236,8 @@ func main() {
 	telegramListener = newTelegramHandler(bot)
 	go telegramListener.handleUpdates()
 
-	vk := VKHandler{accessToken: "b397ce84b397ce84b397ce8432b0819482bb397b397ce84d6cdd2ca964821d7fd266b76"}
-	go vk.handleUpdates()
+	vkListener = VKHandler{accessToken: "b397ce84b397ce84b397ce8432b0819482bb397b397ce84d6cdd2ca964821d7fd266b76"}
+	go vkListener.handleUpdates()
 
 	sender()
 

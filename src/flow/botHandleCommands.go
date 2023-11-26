@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -24,6 +25,7 @@ func handleStart(username string) {
 func handleView(username string) {
 	totalInfo, err := dataBase.getUserInfo(username)
 	if err != nil {
+		log.Println(err.Error())
 		sendMessage(username, err.Error())
 		return
 	}
@@ -90,6 +92,7 @@ func handleAddVK(username, text string) {
 
 	if !ok {
 		sendMessage(username, wrongFmtError.Error())
+		return
 	}
 
 	objectName, objectType, id, err := getVKInfo(link, vkToken)
@@ -362,4 +365,40 @@ func createMenuKeyboard() tgbotapi.ReplyKeyboardMarkup {
 		),
 	)
 	return keyboard
+}
+
+func HandlegetHistoryVK(username, msg string) {
+	after, _ := strings.CutPrefix(msg, "/historyVK")
+	txt := strings.Fields(after)
+	if len(txt) != 2 {
+		sendMessage(username, wrongFmtError.Error())
+		return
+	}
+	link := txt[0]
+	count, err := strconv.Atoi(txt[1])
+	if err != nil {
+		sendMessage(username, "Incorrect count of posts")
+		return
+	}
+
+	publicName, objectType, objectID, err := getVKInfo(link, vkToken)
+	if err != nil {
+		sendMessage(username, err.Error())
+		return
+	}
+	if objectType != "group" {
+		sendMessage(username, "Resolved object is not a group")
+		return
+	}
+
+	ID := fmt.Sprintf("%d", objectID)
+
+	hsh := getHash(publicName) % VKNHistoryWorkers
+	VKHistoryChans[hsh] <- UserHistory{
+		user:       username,
+		link:       link,
+		publicID:   ID,
+		postsCount: count,
+		publicName: publicName,
+	}
 }
