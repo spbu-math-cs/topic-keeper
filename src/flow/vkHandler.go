@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	vkObjectInfoRequest = "https://api.vk.com/method/utils.resolveScreenName?screen_name=%s&access_token=%s&v=%s"
-	VKGetPostRequest    = "https://api.vk.com/method/wall.get?owner_id=-%s&count=%s&access_token=%s&v=%s"
-	VKPostLink          = "https://vk.com/wall-%s_%d"
-	apiVersion          = "5.154"
-	VKNWorkers          = 30
+	vkObjectInfoRequest   = "https://api.vk.com/method/utils.resolveScreenName?screen_name=%s&access_token=%s&v=%s"
+	vkGetGroupNameRequest = "https://api.vk.com/method/groups.getById?group_id=%d&access_token=%s&v=%s"
+	VKGetPostRequest      = "https://api.vk.com/method/wall.get?owner_id=-%s&count=%s&access_token=%s&v=%s"
+	VKPostLink            = "https://vk.com/wall-%s_%d"
+	apiVersion            = "5.154"
+	VKNWorkers            = 30
 )
 
 type Post struct {
@@ -223,6 +224,46 @@ func resolveScreenName(screenName, accessToken string) (*ResolvedInfo, error) {
 	return &result.Response, nil
 }
 
+type GroupsGetByIdResponse struct {
+	Groups []Group `json:"groups"`
+}
+
+type Group struct {
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	ScreenName string `json:"screen_name"`
+	IsClosed   int    `json:"is_closed"`
+	Type       string `json:"type"`
+	Photo50    string `json:"photo_50"`
+	Photo100   string `json:"photo_100"`
+	Photo200   string `json:"photo_200"`
+}
+
+func getGroupName(groupID int, accessToken string) (string, error) {
+	url := fmt.Sprintf(vkGetGroupNameRequest, groupID, accessToken, apiVersion)
+	response, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+
+	var result struct {
+		Response GroupsGetByIdResponse `json:"response"`
+	}
+	body, err := ioutil.ReadAll(response.Body)
+	log.Println(string(body))
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return "", err
+	}
+
+	if len(result.Response.Groups) > 0 {
+		return result.Response.Groups[0].Name, nil
+	}
+
+	return "", fmt.Errorf("group with ID %d not found", groupID)
+}
+
 func extractGroupNameFromURL(url string) string {
 	url = strings.TrimPrefix(url, "http://")
 	url = strings.TrimPrefix(url, "https://")
@@ -240,16 +281,23 @@ func extractGroupNameFromURL(url string) string {
 	return ""
 }
 
-func getVKInfo(groupLink, accessToken string) (string, int, error) {
+func getVKInfo(groupLink, accessToken string) (string, string, int, error) {
 	name := extractGroupNameFromURL(groupLink)
 	if name == "" {
-		return "", -1, errors.New("Неправильная ссылка")
+		return "", "", -1, errors.New("Неправильная ссылка")
 
 	}
 	resolve, err := resolveScreenName(name, accessToken)
 	if err != nil {
 		log.Println(err.Error())
-		return "", -1, err
+		return "", "", -1, err
 	}
-	return resolve.ObjectType, resolve.ObjectID, nil
+
+	publicName, err := getGroupName(resolve.ObjectID, accessToken)
+	if err != nil {
+		log.Println(err.Error())
+		return "", "", -1, err
+	}
+
+	return publicName, resolve.ObjectType, resolve.ObjectID, nil
 }
