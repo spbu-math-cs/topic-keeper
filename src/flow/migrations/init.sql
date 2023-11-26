@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS messages (
 
 
 CREATE TABLE IF NOT EXISTS  vk_last_post_by_public (
-    groupid TEXT primary key,
+    groupid TEXT PRIMARY KEY,
     lastPost INT
 )
 
