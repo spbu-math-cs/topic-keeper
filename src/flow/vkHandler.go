@@ -19,7 +19,13 @@ const (
 	VKGetPostRequest      = "https://api.vk.com/method/wall.get?owner_id=-%s&count=%s&access_token=%s&v=%s"
 	VKPostLink            = "https://vk.com/wall-%s_%d"
 	apiVersion            = "5.154"
-	VKNWorkers            = 30
+	VKNWorkers            = 15
+	VKNHistoryWorkers     = 3
+)
+
+var (
+	VKHistoryChans []chan UserHistory
+	VKChans        []chan []string
 )
 
 type Post struct {
@@ -40,10 +46,17 @@ type ResolvedInfo struct {
 	ObjectID   int    `json:"object_id"`
 }
 
+type UserHistory struct {
+	user       string
+	link       string
+	publicName string
+	publicID   string
+	postsCount int
+}
+
 type VKHandler struct {
 	accessToken       string
 	groupSegmentation map[int][]string
-	VKChans           []chan []string
 }
 
 func (vk *VKHandler) handleUpdates() {
@@ -56,21 +69,26 @@ func (vk *VKHandler) handleUpdates() {
 		vk.initLastPostID(group, vk.accessToken)
 	}
 
-	vkChans := make([]chan []string, VKNWorkers)
+	VKChans = make([]chan []string, VKNWorkers)
 	for i := 0; i < VKNWorkers; i++ {
-		vkChans[i] = make(chan []string)
-		go vk.vkWorker(vkChans[i])
+		VKChans[i] = make(chan []string)
+		go vkWorker(VKChans[i])
+	}
+
+	VKHistoryChans = make([]chan UserHistory, VKNHistoryWorkers)
+	for i := 0; i < VKNHistoryWorkers; i++ {
+		VKHistoryChans[i] = make(chan UserHistory)
+		go vkHistoryWorker(VKHistoryChans[i])
 	}
 
 	segmentation := make(map[int][]string)
 
-	vk.VKChans = vkChans
 	vk.groupSegmentation = segmentation
 
-	go vk.refreshGroups(time.Second * 30)
+	go vk.refreshGroups(time.Second * 60)
 }
 
-func (vk *VKHandler) vkWorker(groups chan []string) {
+func vkWorker(groups chan []string) {
 	curGroups := make([]string, 0)
 	for {
 		select {
@@ -79,25 +97,54 @@ func (vk *VKHandler) vkWorker(groups chan []string) {
 		}
 
 		for _, group := range curGroups {
-			posts := vk.fetchPosts(group)
+			posts := fetchPosts(group)
 			if posts == nil {
 				continue
 			}
 			hsh := getHash(group) % NWorkers
 			for _, post := range posts {
 				msg := workEvent{
-					application: VK,
-					channel:     group,
-					channelID:   group,
-					text:        post.Text,
-					link:        post.URL,
-					messageID:   string(rune(post.ID)),
+					application:    VK,
+					channel:        group,
+					channelID:      group,
+					text:           post.Text,
+					link:           post.URL,
+					messageID:      string(rune(post.ID)),
+					historyRequest: nil,
 				}
 				workChans[hsh] <- msg
 			}
 		}
 
-		time.Sleep(time.Second * 30)
+		time.Sleep(time.Second * 60)
+	}
+}
+
+func vkHistoryWorker(historyRequestChan chan UserHistory) {
+	for request := range historyRequestChan {
+
+		count := fmt.Sprintf("%d", request.postsCount)
+
+		posts, err := getLatestPosts(request.publicID, count)
+		if err != nil {
+			log.Println(err.Error())
+			continue
+		}
+
+		hsh := getHash(request.publicName) % NWorkers
+
+		for _, post := range posts {
+			workChans[hsh] <- workEvent{
+				application:    VK,
+				channel:        request.publicName,
+				channelID:      request.publicID,
+				text:           post.Text,
+				link:           fmt.Sprintf(VKPostLink, request.publicID, post.ID),
+				messageID:      fmt.Sprintf("%d", post.ID),
+				historyRequest: &historyRequest{request.user},
+			}
+
+		}
 	}
 }
 
@@ -121,7 +168,7 @@ func (vk *VKHandler) refreshGroups(period time.Duration) {
 		was := vk.groupSegmentation[i]
 		sort.Strings(was)
 		if !slices.Equal(was, cur) {
-			vk.VKChans[i] <- cur
+			VKChans[i] <- cur
 		}
 	}
 
@@ -129,7 +176,7 @@ func (vk *VKHandler) refreshGroups(period time.Duration) {
 }
 
 func (vk *VKHandler) initLastPostID(groupID, accessToken string) {
-	posts, err := vk.getLatestPosts(groupID, "1")
+	posts, err := getLatestPosts(groupID, "1")
 	if err != nil {
 		log.Printf("Error fetching initial post: %s", err)
 		return
@@ -144,9 +191,8 @@ func (vk *VKHandler) initLastPostID(groupID, accessToken string) {
 	}
 }
 
-func (vk *VKHandler) getLatestPosts(groupID string, count string) ([]Post, error) {
-	url := fmt.Sprintf(VKGetPostRequest, groupID, count, vk.accessToken, apiVersion)
-
+func getLatestPosts(groupID string, count string) ([]Post, error) {
+	url := fmt.Sprintf(VKGetPostRequest, groupID, count, vkToken, apiVersion)
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -167,8 +213,8 @@ func (vk *VKHandler) getLatestPosts(groupID string, count string) ([]Post, error
 	return apiResp.Response.Items, nil
 }
 
-func (vk *VKHandler) fetchPosts(groupID string) []Post {
-	posts, err := vk.getLatestPosts(groupID, "1")
+func fetchPosts(groupID string) []Post {
+	posts, err := getLatestPosts(groupID, "1")
 	if err != nil {
 		log.Printf("Error fetching posts: %s", err)
 		return nil
