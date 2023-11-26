@@ -22,18 +22,21 @@ func handleStart(username string) {
 }
 
 func handleView(username string) {
-	topicByChan, err := dataBase.getUserInfo(username)
+	totalInfo, err := dataBase.getUserInfo(username)
 	if err != nil {
 		sendMessage(username, err.Error())
 		return
 	}
 	str := strings.Builder{}
-	for ch, topics := range topicByChan {
-		str.WriteString(fmt.Sprintf("%s:\n", ch))
-		for _, topic := range topics {
-			str.WriteString(fmt.Sprintf("  - %s\n", topic))
+	for application, topicByChan := range totalInfo {
+		str.WriteString(fmt.Sprintf("%s:\n", application))
+		for ch, topics := range topicByChan {
+			str.WriteString(fmt.Sprintf(" %s:\n", ch))
+			for _, topic := range topics {
+				str.WriteString(fmt.Sprintf("   - %s\n", topic))
+			}
+			str.WriteString("\n")
 		}
-		str.WriteString("\n")
 	}
 	ans := str.String()
 	if ans == "" {
@@ -89,7 +92,7 @@ func handleAddVK(username, text string) {
 		sendMessage(username, wrongFmtError.Error())
 	}
 
-	objectType, id, err := getVKInfo(link, vkToken)
+	objectName, objectType, id, err := getVKInfo(link, vkToken)
 	if err != nil {
 		log.Println(err.Error())
 		return
@@ -105,6 +108,11 @@ func handleAddVK(username, text string) {
 	topic = strings.TrimSpace(topic)
 
 	if err := dataBase.addTopic(username, groupID, topic, VK); err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	if err := dataBase.addVKPublic(objectName, groupID, 0); err != nil {
 		log.Println(err.Error())
 		return
 	}
@@ -159,7 +167,7 @@ func handleRemoveTopicVK(username, text string) {
 		sendMessage(username, wrongFmtError.Error())
 	}
 
-	objectType, id, err := getVKInfo(link, vkToken)
+	_, objectType, id, err := getVKInfo(link, vkToken)
 	if err != nil {
 		log.Println(err.Error())
 		return
@@ -229,7 +237,7 @@ func handleRemoveChannelVK(username, text string) {
 		sendMessage(username, wrongFmtError.Error())
 	}
 
-	objectType, id, err := getVKInfo(link, vkToken)
+	_, objectType, id, err := getVKInfo(link, vkToken)
 	if err != nil {
 		log.Println(err.Error())
 		return
