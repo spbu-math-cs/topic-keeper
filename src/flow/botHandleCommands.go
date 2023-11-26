@@ -41,6 +41,7 @@ func handleView(username string) {
 	}
 	sendMessage(username, ans)
 }
+
 func handleAdd(username string, msg string) {
 	after, _ := strings.CutPrefix(msg, "/add")
 	elements := strings.Fields(after)

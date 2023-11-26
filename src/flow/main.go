@@ -190,7 +190,7 @@ func main() {
 			Messages: "messages",
 			Users:    "users",
 			Channels: "channels",
-			VKPostID: "vk_last_id",
+			VKPostID: "vk_last_post_by_public",
 		},
 	)
 	if err != nil {
