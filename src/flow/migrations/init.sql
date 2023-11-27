@@ -26,5 +26,10 @@ CREATE TABLE IF NOT EXISTS  vk_last_post_by_public (
     groupid TEXT PRIMARY KEY,
     last_post INT,
     public_name TEXT
+);
+
+CREATE TABLE IF NOT EXISTS  telegram_channel_by_id (
+    groupid TEXT PRIMARY KEY,
+    public_name TEXT
 )
 

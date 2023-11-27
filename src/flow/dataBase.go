@@ -49,6 +49,9 @@ type LocalStorage interface {
 	isPaused(user string) (bool, error)
 	getID(user string) (int64, error)
 	getVKPublicNameByID(groupID string) (string, error)
+	getTGPublicNameByID(groupID string) (string, error)
+	getTGPrivateChannel() (map[string]string, error)
+	addTGPrivateChannelID(groupName, groupID string) error
 	addVKPublic(groupName, groupId string, postID int) error
 	getVKPublic() ([]string, error)
 	updateVKLastPostID(groupID string, postID int) error
@@ -73,6 +76,7 @@ type TablesNames struct {
 	Users    string
 	Messages string
 	VKPostID string
+	TGPostID string
 }
 
 //go:embed migrations/init.sql
@@ -176,6 +180,7 @@ func (d *DataBase) getUserInfo(user string) (map[Application]map[string][]string
 	if err != nil {
 		return nil, err
 	}
+
 	vkMap := make(map[string]string)
 	for rows.Next() {
 		var id int
@@ -183,7 +188,12 @@ func (d *DataBase) getUserInfo(user string) (map[Application]map[string][]string
 		err = rows.Scan(&id, &publicName)
 		sID := fmt.Sprintf("%d", id)
 		vkMap[sID] = publicName
-		log.Println(publicName, id)
+	}
+
+	tgMap, err := dataBase.getTGPrivateChannel()
+	if err != nil {
+		log.Println(err.Error())
+		return nil, err
 	}
 
 	query := fmt.Sprintf("SELECT channel, topic, application FROM %s WHERE nickname = $1", d.Names.Channels)
@@ -215,6 +225,10 @@ func (d *DataBase) getUserInfo(user string) (map[Application]map[string][]string
 			curTopics = append(curTopics, topic)
 			answer[VK][channel] = curTopics
 		case Telegram:
+			name, private := tgMap[channel]
+			if private {
+				channel = name
+			}
 			curTopics := answer[Telegram][channel]
 			curTopics = append(curTopics, topic)
 			answer[Telegram][channel] = curTopics
@@ -495,4 +509,47 @@ func (d *DataBase) getVKPublicNameByID(groupID string) (string, error) {
 
 	return name, nil
 
+}
+
+func (d *DataBase) getTGPublicNameByID(groupID string) (string, error) {
+	query := fmt.Sprintf("SELECT public_name FROM %s WHERE groupid = $1", d.Names.TGPostID)
+	row := d.DB.QueryRow(query, groupID)
+
+	var name string
+	err := row.Scan(&name)
+	if err != nil {
+		return "", err
+	}
+
+	return name, nil
+}
+
+func (d *DataBase) addTGPrivateChannelID(groupName, groupID string) error {
+	query := fmt.Sprintf(
+		`INSERT INTO %s (groupid, public_name) VALUES ($1, $2) 
+				ON CONFLICT (groupid) DO UPDATE SET public_name =  $3`,
+		d.Names.TGPostID)
+	_, err := d.DB.Exec(
+		query,
+		groupID,
+		groupName,
+		groupName,
+	)
+	return err
+}
+
+func (d *DataBase) getTGPrivateChannel() (map[string]string, error) {
+	query := fmt.Sprintf("SELECT * FROM %s", d.Names.TGPostID)
+	rows, err := d.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	tgMap := make(map[string]string)
+	for rows.Next() {
+		var id, publicName string
+		err = rows.Scan(&id, &publicName)
+		tgMap[id] = publicName
+	}
+
+	return tgMap, nil
 }
