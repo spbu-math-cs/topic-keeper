@@ -364,7 +364,7 @@ func HandlegetHistoryVK(username, msg string) {
 	}
 	link := txt[0]
 	count, err := strconv.Atoi(txt[1])
-	if err != nil {
+	if err != nil || count < 0 {
 		sendMessage(username, "Incorrect count of posts")
 		return
 	}
