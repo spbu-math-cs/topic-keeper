@@ -103,9 +103,14 @@ func vkWorker(groups chan []string) {
 			}
 			hsh := getHash(group) % NWorkers
 			for _, post := range posts {
+				groupName, err := dataBase.getVKPublicNameByID(group)
+				if err != nil {
+					log.Println(err.Error())
+					continue
+				}
 				msg := workEvent{
 					application:    VK,
-					channel:        group,
+					channel:        groupName,
 					channelID:      group,
 					text:           post.Text,
 					link:           post.URL,

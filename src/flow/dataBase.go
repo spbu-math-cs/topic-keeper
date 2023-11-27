@@ -19,6 +19,10 @@ const (
 	MatterMost Application = "matter most"
 )
 
+func getUsingApplications() []Application {
+	return []Application{VK, Telegram}
+}
+
 type Message struct {
 	Application Application `json:"application"`
 	User        string      `json:"user"`
@@ -44,6 +48,7 @@ type LocalStorage interface {
 	unpauseUser(user string) error
 	isPaused(user string) (bool, error)
 	getID(user string) (int64, error)
+	getVKPublicNameByID(groupID string) (string, error)
 	addVKPublic(groupName, groupId string, postID int) error
 	getVKPublic() ([]string, error)
 	updateVKLastPostID(groupID string, postID int) error
@@ -191,10 +196,10 @@ func (d *DataBase) getUserInfo(user string) (map[Application]map[string][]string
 	}
 
 	answer := make(map[Application]map[string][]string)
-	vk := make(map[string][]string)
-	answer[VK] = vk
-	tg := make(map[string][]string)
-	answer[Telegram] = tg
+	for _, application := range getUsingApplications() {
+		curApplicationMap := make(map[string][]string)
+		answer[application] = curApplicationMap
+	}
 
 	for rows.Next() {
 		var channel, topic string
@@ -476,4 +481,18 @@ func (d *DataBase) addVKPublic(groupName, groupID string, postID int) error {
 		groupName,
 	)
 	return err
+}
+
+func (d *DataBase) getVKPublicNameByID(groupID string) (string, error) {
+	query := fmt.Sprintf("SELECT public_name FROM %s WHERE groupid = $1", d.Names.VKPostID)
+	row := d.DB.QueryRow(query, groupID)
+
+	var name string
+	err := row.Scan(&name)
+	if err != nil {
+		return "", err
+	}
+
+	return name, nil
+
 }
