@@ -11,18 +11,35 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15
+
+        env:
+          POSTGRES_PASSWORD: secret
+          POSTGRES_USER: pguser
+          POSTGRES_DB: mydb
+
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5433:5432
+
     strategy:
       fail-fast: false
-      matrix:
-        golang:
-          - '1.20'
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Setup golang ${{ matrix.golang }}
-        uses: actions/setup-go@v3
+      - name: Setup golang
+        uses: actions/setup-go@v4
         with:
-          go-version: ${{ matrix.golang }}
+          go-version: '>=1.20.0'
 
-      - run: go list -f '{{.Dir}}' -m | xargs go test -v
+      - name: Run tests
+        run: go list -f '{{.Dir}}' -m | xargs go test -v
+        env:
+          DBURL: "postgres://pguser:secret@localhost:5433/mydb"
