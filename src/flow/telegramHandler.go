@@ -53,13 +53,23 @@ func (t *TelegramHandler) handleUpdates() {
 				workChans[hsh%NWorkers] <- w
 			} else {
 				hsh := getHash(update.ChannelPost.Chat.Title)
+				ID := getPrivateID(update.ChannelPost.Chat.ID)
+				name := update.ChannelPost.Chat.Title
+
+				err := dataBase.addTGPrivateChannelID(name, ID)
+				if err != nil {
+					log.Println(err.Error())
+					continue
+				}
+
 				w := workEvent{
 					application:    Telegram,
-					channel:        update.ChannelPost.Chat.Title,
-					channelID:      getPrivateID(update.ChannelPost.Chat.ID),
+					channel:        ID,
+					channelID:      ID,
 					text:           update.ChannelPost.Text,
 					messageID:      strconv.Itoa(update.ChannelPost.MessageID),
 					historyRequest: nil,
+					privateChannel: true,
 				}
 				w.link = createPrivateLink(w)
 				workChans[hsh%NWorkers] <- w
@@ -80,13 +90,24 @@ func (t *TelegramHandler) handleUpdates() {
 					workChans[hsh%NWorkers] <- w
 				} else {
 					hsh := getHash(update.Message.Chat.Title)
+
+					ID := getPrivateID(update.Message.Chat.ID)
+					name := update.Message.Chat.Title
+
+					err := dataBase.addTGPrivateChannelID(name, ID)
+					if err != nil {
+						log.Println(err.Error())
+						continue
+					}
+
 					w := workEvent{
 						application:    Telegram,
-						channel:        update.Message.Chat.Title,
-						channelID:      getPrivateID(update.Message.Chat.ID),
+						channel:        ID,
+						channelID:      ID,
 						text:           update.Message.Text,
 						messageID:      update.Message.Text,
 						historyRequest: nil,
+						privateChannel: true,
 					}
 					w.link = createPrivateLink(w)
 					workChans[hsh%NWorkers] <- w

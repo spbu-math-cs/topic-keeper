@@ -32,6 +32,7 @@ type workEvent struct {
 	application    Application
 	channel        string
 	channelID      string
+	privateChannel bool
 	text           string
 	link           string
 	messageID      string
@@ -156,6 +157,14 @@ func worker(workChan chan workEvent) {
 				}
 			}
 
+			if update.privateChannel && update.application == Telegram {
+				update.channel, err = dataBase.getTGPublicNameByID(update.channel)
+				if err != nil {
+					log.Println(err.Error())
+					continue
+				}
+			}
+
 			finalTopics := strings.Join(userTopics, ", ")
 			message := Message{
 				Application: update.application,
@@ -210,6 +219,7 @@ func main() {
 			Users:    "users",
 			Channels: "channels",
 			VKPostID: "vk_last_post_by_public",
+			TGPostID: "telegram_channel_by_id",
 		},
 	)
 	if err != nil {
