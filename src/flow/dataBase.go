@@ -13,14 +13,15 @@ import (
 type Application = string
 
 const (
+	// TODO: extract Delay to config
 	Delay                  = 10 * time.Second
 	Telegram   Application = "telegram"
 	VK         Application = "vk"
-	MatterMost Application = "matter most"
+	MatterMost Application = "mattermost"
 )
 
 func getUsingApplications() []Application {
-	return []Application{VK, Telegram}
+	return []Application{VK, Telegram, MatterMost}
 }
 
 type Message struct {
@@ -33,6 +34,9 @@ type Message struct {
 }
 
 type LocalStorage interface {
+	addMmChan(id string, name string) error
+	getMmChan(id string) (string, error)
+
 	addUser(user string, id int64) error
 	addTopic(user, channel, topic string, application Application) error
 	removeTopic(user, channel, topic string, application Application) error
@@ -89,6 +93,23 @@ func NewDatabase(cfg DBConfig, names TablesNames) (*DataBase, error) {
 		return nil, err
 	}
 	return &DataBase{db, names}, nil
+}
+
+func (d *DataBase) addMmChan(id, name string) error {
+	query := "INSERT INTO mm_chans(id, name) VALUES ($1, $2)"
+	_, err := d.DB.Exec(query, id, name)
+	return err
+}
+
+func (d *DataBase) getMmChan(id string) (string, error) {
+	query := "SELECT name FROM mm_chans WHERE id=$1"
+	row := d.DB.QueryRow(query, id)
+	var name string
+	err := row.Scan(&name)
+	if err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 func (d *DataBase) addTopic(user, channel, topic string, application Application) error {
@@ -218,6 +239,10 @@ func (d *DataBase) getUserInfo(user string) (map[Application]map[string][]string
 			curTopics := answer[Telegram][channel]
 			curTopics = append(curTopics, topic)
 			answer[Telegram][channel] = curTopics
+		case MatterMost:
+			curTopics := answer[MatterMost][channel]
+			curTopics = append(curTopics, topic)
+			answer[MatterMost][channel] = curTopics
 		}
 	}
 
@@ -441,7 +466,7 @@ func (d *DataBase) getVKPublic() ([]string, error) {
 
 func (d *DataBase) updateVKLastPostID(groupID string, postID int) error {
 	query := fmt.Sprintf(
-		`INSERT INTO %s (groupid, last_post) VALUES ($1, $2) 
+		`INSERT INTO %s (groupid, last_post) VALUES ($1, $2)
 				ON CONFLICT (groupid) DO UPDATE SET last_post =  $3`,
 		d.Names.VKPostID)
 	_, err := d.DB.Exec(
@@ -470,7 +495,7 @@ func (d *DataBase) getVKLastPostID(groupID string) (int, error) {
 
 func (d *DataBase) addVKPublic(groupName, groupID string, postID int) error {
 	query := fmt.Sprintf(
-		`INSERT INTO %s (groupid, last_post, public_name) VALUES ($1, $2, $3) 
+		`INSERT INTO %s (groupid, last_post, public_name) VALUES ($1, $2, $3)
 				ON CONFLICT (groupid) DO UPDATE SET public_name =  $4`,
 		d.Names.VKPostID)
 	_, err := d.DB.Exec(

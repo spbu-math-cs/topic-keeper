@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"slices"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -172,7 +172,7 @@ func (vk *VKHandler) refreshGroups(period time.Duration) {
 		sort.Strings(cur)
 		was := vk.groupSegmentation[i]
 		sort.Strings(was)
-		if !slices.Equal(was, cur) {
+		if !reflect.DeepEqual(was, cur) {
 			VKChans[i] <- cur
 		}
 	}

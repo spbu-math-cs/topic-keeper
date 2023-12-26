@@ -1,3 +1,8 @@
+CREATE TABLE IF NOT EXISTS mm_chans (
+    id TEXT PRIMARY KEY,
+    name TEXT
+);
+
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     nickname TEXT,

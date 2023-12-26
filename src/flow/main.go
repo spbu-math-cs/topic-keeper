@@ -3,12 +3,14 @@ package main
 import (
 	_ "embed"
 	"errors"
+	"flag"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"hash/fnv"
 	"log"
 	"os"
 	"strings"
+
+	"gopkg.in/yaml.v2"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -80,12 +82,11 @@ func parseChannelName(s string) (string, error) {
 }
 
 //echo $TOPIC_KEEPER_TOKEN
-//export TOPIC_KEEPER_TOKEN="6638697091:AAHhpaS-rXlgWXHQzlfa3tAGUoRctKp8n2Q"
-
+//export TOPIC_KEEPER_TOKEN=<token>
 //echo $TOPIC_KEEPER_OPENAI_TOKEN
-//export TOPIC_KEEPER_OPENAI_TOKEN=""
+//export TOPIC_KEEPER_OPENAI_TOKEN=<token>
 
-const format = `In application: %s 
+const format = `In application: %s
 Topic was detected: [%s]
 In channel: %s
 Summary: %s
@@ -190,7 +191,11 @@ func getHash(s string) uint32 {
 	return h.Sum32()
 }
 
+var mt = flag.Bool("mt", false, "run with mattermost")
+
 func main() {
+	flag.Parse()
+
 	workChans = make([]chan workEvent, NWorkers)
 	sendChan = make(chan Message, BaseCap)
 
@@ -216,31 +221,12 @@ func main() {
 		panic(err)
 	}
 
-	token := os.Getenv("TOPIC_KEEPER_TOKEN")
-	openAIkey = os.Getenv("TOPIC_KEEPER_OPENAI_TOKEN")
-	vkToken = "b397ce84b397ce84b397ce8432b0819482bb397b397ce84d6cdd2ca964821d7fd266b76"
-
-	bot, err = tgbotapi.NewBotAPI(token)
-	if err != nil {
-		log.Fatal(err.Error())
+	api = &basicAPI{}
+	if *mt {
+		os.Exit(mattermostMain())
+	} else {
+		os.Exit(tgMain())
 	}
-	if openAIkey != "" {
-		log.Printf("using openAI summarizer with key: %s", openAIkey)
-	}
-	setBotCommands(bot)
-	bot.Debug = true
-	log.Printf("Authorized on account: %s\n", bot.Self.UserName)
-
-	api = basicAPI{}
-
-	telegramListener = newTelegramHandler(bot)
-	go telegramListener.handleUpdates()
-
-	vkListener = VKHandler{accessToken: "b397ce84b397ce84b397ce8432b0819482bb397b397ce84d6cdd2ca964821d7fd266b76"}
-	go vkListener.handleUpdates()
-
-	sender()
-
 }
 
 func sendMessage(username string, text string) {

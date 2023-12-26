@@ -9,6 +9,11 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
+const (
+	startReply   = "Привет! Бот предназначен для помощи в быстром и эффективном поиске нужной информации в чатах и темах на основе предоставленного списка."
+	unknownReply = "Я вас не понимаю, используйте /help для справки"
+)
+
 func handleStart(username string) {
 	userId, err := dataBase.getID(username)
 	if err != nil {
@@ -16,8 +21,7 @@ func handleStart(username string) {
 		log.Printf(err.Error())
 		return
 	}
-	reply := "Привет! Бот предназначен для помощи в быстром и эффективном поиске нужной информации в чатах и темах на основе предоставленного списка."
-	msg := tgbotapi.NewMessage(userId, reply)
+	msg := tgbotapi.NewMessage(userId, startReply)
 	msg.ReplyMarkup = createMenuKeyboard()
 	handleHelp(username)
 }
