@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS mm_chans (
 );
 
 CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY,
+    id INTEGER, --PRIMARY KEY,
     nickname TEXT,
     paused BOOL
 );
